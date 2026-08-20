@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>DshDesktop</RootNamespace>
+    <AssemblyName>DshDesktop</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 当前构建面向 x64；如需要 x86/arm64 可调整 RuntimeIdentifier 与 Platforms -->
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- unpackaged 应用：生成普通 exe，无需 MSIX 安装 -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- 自包含 Windows App SDK 运行时，目标机器无需单独安装 runtime -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 捆绑的 Node + dsh 运行时由 scripts/build-all.cmd 在 publish 后用 robocopy 复制
+         （MSBuild 默认排除 **/node_modules/**，无法用 Content 通配可靠打包） -->
+  </ItemGroup>
+</Project>
