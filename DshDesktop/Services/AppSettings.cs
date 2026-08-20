@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -6,11 +7,14 @@ namespace DshDesktop.Services;
 
 /// <summary>
 /// 本地用户设置，持久化到 <c>%APPDATA%\DshDesktop\settings.json</c>。
-/// 目前仅保存用户手动指定的 dsh 可执行文件路径（为空表示自动检测）。
+/// 保存用户手动指定的 dsh 路径（空 = 自动检测）与崩溃后自动屏蔽的插件清单。
 /// </summary>
 public sealed class AppSettings
 {
     public string? DshPath { get; set; }
+
+    /// <summary>因加载失败被自动屏蔽的插件（npm 包名）。</summary>
+    public List<string> DisabledPlugins { get; set; } = new();
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

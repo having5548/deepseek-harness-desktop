@@ -1,22 +1,33 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace DshDesktop.Services;
 
+/// <summary>服务因插件加载失败而崩溃的信息。</summary>
+public sealed record CrashInfo(IReadOnlyList<string> PluginNames, string ErrorLog);
+
 /// <summary>
 /// 管理 dsh web 服务子进程：以 <c>--no-open --port 0</c> 启动，解析
 /// <c>dsh web: http://127.0.0.1:&lt;port&gt;</c> 输出行得到真实 URL，
-/// 并负责退出时终止整棵进程树。
+/// 检测插件加载失败导致的崩溃，并负责退出时终止整棵进程树。
 /// </summary>
 public sealed class DshHostProcess : IDisposable
 {
     private static readonly Regex UrlPattern = new(@"dsh web: (http://127\.0\.0\.1:\d+)", RegexOptions.Compiled);
+    private static readonly Regex PluginListPattern = new(@"plugin\(s\) failed to load:\s*(.+?)(?:;|$)", RegexOptions.Compiled);
+    private static readonly Regex PluginEntryPattern = new(@"failed to apply loader entry\s+\S+\s+\(([^)]+)\)", RegexOptions.Compiled);
+
+    private const int MaxErrorBuffer = 200;
 
     private readonly string _workingDirectory;
+    private readonly object _bufferLock = new();
+    private readonly List<string> _errorBuffer = new();
     private Process? _process;
 
     /// <summary>服务已就绪，参数为可访问的 Web UI URL。</summary>
@@ -30,6 +41,9 @@ public sealed class DshHostProcess : IDisposable
 
     /// <summary>服务进程退出，参数为退出码。</summary>
     public event Action<int>? Exited;
+
+    /// <summary>检测到插件加载失败导致的崩溃（参数含插件名与错误日志）。</summary>
+    public event Action<CrashInfo>? Crashed;
 
     public DshHostProcess()
     {
@@ -75,6 +89,16 @@ public sealed class DshHostProcess : IDisposable
         psi.ArgumentList.Add("--port");
         psi.ArgumentList.Add("0");
 
+        // 注入 PATH：`dsh plugin` 内部 spawnSync('pnpm') 依赖 PATH 找到捆绑的 pnpm
+        var runtimeDir = Path.GetDirectoryName(runtime.NodePath);
+        var path = Environment.GetEnvironmentVariable("Path") ?? string.Empty;
+        psi.Environment["Path"] = string.IsNullOrEmpty(runtimeDir) ? path : runtimeDir + ";" + path;
+
+        lock (_bufferLock)
+        {
+            _errorBuffer.Clear();
+        }
+
         _process = Process.Start(psi);
         if (_process is null)
         {
@@ -94,6 +118,14 @@ public sealed class DshHostProcess : IDisposable
             if (isError)
             {
                 Error?.Invoke(line);
+                lock (_bufferLock)
+                {
+                    _errorBuffer.Add(line);
+                    if (_errorBuffer.Count > MaxErrorBuffer)
+                    {
+                        _errorBuffer.RemoveRange(0, _errorBuffer.Count - MaxErrorBuffer);
+                    }
+                }
             }
             else
             {
@@ -119,6 +151,59 @@ public sealed class DshHostProcess : IDisposable
             return _process.ExitCode;
         });
         Exited?.Invoke(code);
+
+        var crash = TryDetectCrash();
+        if (crash is not null)
+        {
+            Crashed?.Invoke(crash);
+        }
+    }
+
+    /// <summary>从错误缓冲中识别"插件加载失败导致崩溃"的情况并提取插件名与日志。</summary>
+    private CrashInfo? TryDetectCrash()
+    {
+        string[] lines;
+        lock (_bufferLock)
+        {
+            lines = _errorBuffer.ToArray();
+        }
+        var text = string.Join("\n", lines);
+        var names = new List<string>();
+
+        var listMatch = PluginListPattern.Match(text);
+        foreach (Match m in PluginEntryPattern.Matches(text))
+        {
+            AddName(names, m.Groups[1].Value);
+        }
+        if (listMatch.Success)
+        {
+            foreach (var part in listMatch.Groups[1].Value.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                AddName(names, part);
+            }
+        }
+
+        var isLoadFailure = listMatch.Success
+            || text.Contains("plugin tree failed to load", StringComparison.Ordinal)
+            || text.Contains("fatal load failure", StringComparison.Ordinal);
+        if (!isLoadFailure || names.Count == 0)
+        {
+            return null;
+        }
+
+        var log = string.Join("\n", lines.TakeLast(60));
+        return new CrashInfo(names, log);
+    }
+
+    private static void AddName(List<string> names, string raw)
+    {
+        // 去掉可能的 @scope/name@version 尾缀
+        var name = raw.Trim();
+        if (name.Length == 0 || names.Contains(name))
+        {
+            return;
+        }
+        names.Add(name);
     }
 
     /// <summary>终止服务进程及其整棵子进程树。</summary>

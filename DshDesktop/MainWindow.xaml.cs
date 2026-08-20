@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using DshDesktop.Services;
@@ -15,6 +16,7 @@ public sealed partial class MainWindow : Window
 
     private bool _initialized;
     private bool _navigatedToApp;
+    private bool _handlingCrash;
     private string? _currentUrl;
 
     public MainWindow()
@@ -26,6 +28,7 @@ public sealed partial class MainWindow : Window
         _host.UrlReady += OnUrlReady;
         _host.Error += OnHostError;
         _host.Exited += OnHostExited;
+        _host.Crashed += OnCrash;
 
         Closed += OnWindowClosed;
         Activated += OnActivated;
@@ -155,6 +158,121 @@ public sealed partial class MainWindow : Window
         {
             _settings.DshPath = dialog.DshPath;
             _settings.Save();
+            await RestartHostAsync();
+        }
+    }
+
+    private async void PluginsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new PluginDialog(this, _settings);
+        dialog.XamlRoot = Content.XamlRoot;
+        dialog.PluginsChanged += async () =>
+        {
+            ServiceStateText.Text = "插件已变更，正在重启服务…";
+            await RestartHostAsync();
+        };
+        await dialog.ShowAsync();
+    }
+
+    // ── 崩溃处理：自动屏蔽报错插件 + 重启 + 弹窗 ───────────
+
+    private void OnCrash(CrashInfo crash)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_handlingCrash)
+            {
+                return;
+            }
+            _handlingCrash = true;
+            try
+            {
+                // 1. 自动屏蔽（卸载 + 记录）报错插件
+                var disabled = new List<string>();
+                foreach (var pkg in crash.PluginNames)
+                {
+                    var ok = await PluginManager.DisablePluginAsync(_settings, pkg);
+                    if (ok)
+                    {
+                        disabled.Add(pkg);
+                    }
+                }
+
+                // 2. 以安全配置自动重启（已排除报错插件）
+                await RestartHostAsync();
+
+                // 3. 弹窗告知用户（插件名 + 报错日志 + 一键重启/恢复）
+                await ShowCrashDialogAsync(crash, disabled);
+            }
+            finally
+            {
+                _handlingCrash = false;
+            }
+        });
+    }
+
+    private async Task ShowCrashDialogAsync(CrashInfo crash, IReadOnlyList<string> disabled)
+    {
+        var panel = new StackPanel { Spacing = 10, Width = 460 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"以下插件加载失败导致服务退出：{string.Join(", ", crash.PluginNames)}",
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        });
+        if (disabled.Count > 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"已自动屏蔽并卸载：{string.Join(", ", disabled)}。服务已尝试以安全配置重启。",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Opacity = 0.85,
+            });
+        }
+        panel.Children.Add(new TextBlock { Text = "报错日志（末尾部分）：", FontSize = 12, Opacity = 0.7 });
+        panel.Children.Add(new Border
+        {
+            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ControlFillColorDefaultBrush"],
+            Padding = new Thickness(10),
+            CornerRadius = new CornerRadius(6),
+            Child = new ScrollViewer
+            {
+                MaxHeight = 240,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = new TextBlock
+                {
+                    Text = string.IsNullOrWhiteSpace(crash.ErrorLog) ? "（无错误输出）" : crash.ErrorLog,
+                    FontSize = 11,
+                    IsTextSelectionEnabled = true,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            },
+        });
+
+        var dialog = new ContentDialog
+        {
+            Title = "插件加载失败（已自动屏蔽）",
+            Content = panel,
+            PrimaryButtonText = "一键重启",
+            SecondaryButtonText = disabled.Count > 0 ? "恢复该插件" : null,
+            CloseButtonText = "关闭",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            await RestartHostAsync();
+        }
+        else if (result == ContentDialogResult.Secondary && disabled.Count > 0)
+        {
+            foreach (var pkg in disabled)
+            {
+                await PluginManager.EnablePluginAsync(_settings, pkg);
+            }
             await RestartHostAsync();
         }
     }

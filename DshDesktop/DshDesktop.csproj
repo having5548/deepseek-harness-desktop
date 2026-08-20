@@ -30,4 +30,9 @@
     <!-- 捆绑的 Node + dsh 运行时由 scripts/build-all.cmd 在 publish 后用 robocopy 复制
          （MSBuild 默认排除 **/node_modules/**，无法用 Content 通配可靠打包） -->
   </ItemGroup>
+
+  <!-- 捆绑运行时（含 pnpm 的 node-gyp 的 .cs 脚本文件）绝不能参与 C# 编译 -->
+  <ItemGroup>
+    <Compile Remove="runtime\**\*" />
+  </ItemGroup>
 </Project>
