@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using DshDesktop.Services;
 using Microsoft.UI.Xaml;
@@ -18,6 +19,7 @@ public sealed partial class MainWindow : Window
     private bool _navigatedToApp;
     private bool _handlingCrash;
     private string? _currentUrl;
+    private CancellationTokenSource? _startTimeoutCts;
 
     public MainWindow()
     {
@@ -87,6 +89,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            _startTimeoutCts?.Cancel();
             _currentUrl = url;
             ServiceStateText.Text = "服务运行中";
             if (!_navigatedToApp)
@@ -281,21 +284,61 @@ public sealed partial class MainWindow : Window
 
     private async Task RestartHostAsync()
     {
-        _host.Stop();
-        _navigatedToApp = false;
-        _currentUrl = null;
-        var runtime = await DshLocator.FindAsync(_settings.DshPath);
-        if (runtime is null)
+        try
         {
-            ShowStatus(
-                "未检测到 DeepSeek Harness CLI",
-                "请检查设置中的 dsh 路径是否正确。",
-                isError: true);
-            return;
+            _host.Stop();
+            _navigatedToApp = false;
+            _currentUrl = null;
+            var runtime = await DshLocator.FindAsync(_settings.DshPath);
+            if (runtime is null)
+            {
+                ShowStatus(
+                    "未检测到 DeepSeek Harness CLI",
+                    "请检查设置中的 dsh 路径是否正确。",
+                    isError: true);
+                return;
+            }
+            ServiceStateText.Text = "正在启动服务…";
+            ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
+            _host.Start(runtime);
+            ArmStartTimeout();
         }
-        ServiceStateText.Text = "正在启动服务…";
-        ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
-        _host.Start(runtime);
+        catch (Exception ex)
+        {
+            ServiceStateText.Text = "服务启动失败";
+            ShowStatus("服务启动失败", ex.Message, isError: true);
+        }
+    }
+
+    /// <summary>启动 45 秒超时：若服务未就绪（如插件加载挂起），提示用户而不是无限等待。</summary>
+    private void ArmStartTimeout()
+    {
+        _startTimeoutCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _startTimeoutCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(45), cts.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                return; // URL 已就绪
+            }
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_navigatedToApp)
+                {
+                    return;
+                }
+                ServiceStateText.Text = "服务启动超时";
+                ShowStatus(
+                    "服务启动超时",
+                    "dsh 服务未在 45 秒内就绪，可能是插件不兼容导致加载挂起。\n可点击工具栏“插件”在“已屏蔽”中处理，或点击重新加载重试。",
+                    isError: true);
+            });
+        });
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)

@@ -51,7 +51,21 @@ public sealed class DshHostProcess : IDisposable
         _workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
-    public bool IsRunning => _process is { HasExited: false };
+    public bool IsRunning
+    {
+        get
+        {
+            var proc = _process;
+            try
+            {
+                return proc is not null && !proc.HasExited;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+        }
+    }
 
     public void Start(DshRuntime runtime)
     {
@@ -141,15 +155,25 @@ public sealed class DshHostProcess : IDisposable
 
     private async Task WaitForExitAsync()
     {
-        if (_process is null)
+        var proc = _process;
+        if (proc is null)
         {
             return;
         }
-        var code = await Task.Run(() =>
+        int code;
+        try
         {
-            _process.WaitForExit();
-            return _process.ExitCode;
-        });
+            code = await Task.Run(() =>
+            {
+                proc.WaitForExit();
+                return proc.ExitCode;
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // Stop() 已终止并释放进程
+            return;
+        }
         Exited?.Invoke(code);
 
         var crash = TryDetectCrash();
@@ -206,38 +230,44 @@ public sealed class DshHostProcess : IDisposable
         names.Add(name);
     }
 
-    /// <summary>终止服务进程及其整棵子进程树。</summary>
+    /// <summary>终止服务进程及其整棵子进程树。结束后 <see cref="_process"/> 置空，允许干净地再次 <see cref="Start"/>。</summary>
     public void Stop()
     {
-        if (_process is null || _process.HasExited)
+        var proc = _process;
+        _process = null;
+        if (proc is null)
         {
             return;
         }
         try
         {
-            using var killer = Process.Start(new ProcessStartInfo
+            if (!proc.HasExited)
             {
-                FileName = "taskkill.exe",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList =
+                using var killer = Process.Start(new ProcessStartInfo
                 {
-                    "/PID", _process.Id.ToString(),
-                    "/T",   // 终止子进程树
-                    "/F",   // 强制终止
-                },
-            });
-            killer?.WaitForExit(3000);
+                    FileName = "taskkill.exe",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    ArgumentList =
+                    {
+                        "/PID", proc.Id.ToString(),
+                        "/T",   // 终止子进程树
+                        "/F",   // 强制终止
+                    },
+                });
+                killer?.WaitForExit(3000);
+                proc.WaitForExit(2000);
+            }
         }
         catch
         {
-            // 进程可能已退出
+            // 进程可能已退出或已被释放
         }
         finally
         {
             try
             {
-                _process.Dispose();
+                proc.Dispose();
             }
             catch
             {

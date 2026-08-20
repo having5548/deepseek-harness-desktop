@@ -21,11 +21,21 @@ public sealed class PluginDialog : ContentDialog
 
     private readonly MainWindow _owner;
     private readonly AppSettings _settings;
+    private readonly StackPanel _installedPanel = new() { Spacing = 8 };
+    private readonly TextBlock _installedStatus = new() { FontSize = 12, Opacity = 0.7 };
     private readonly StackPanel _remotePanel = new() { Spacing = 8 };
     private readonly TextBlock _remoteStatus = new() { FontSize = 12, Opacity = 0.7 };
     private readonly StackPanel _disabledPanel = new() { Spacing = 8 };
     private readonly TextBlock _disabledStatus = new() { FontSize = 12, Opacity = 0.7 };
     private readonly Button _refreshButton = new() { Content = "刷新列表" };
+
+    /// <summary>profile 模板内置、不应卸载的 bundle。</summary>
+    private static readonly HashSet<string> BuiltinBundles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "@deepseek-ai/dsh-headless",
+    };
 
     public PluginDialog(MainWindow owner, AppSettings settings)
     {
@@ -41,7 +51,21 @@ public sealed class PluginDialog : ContentDialog
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
-        var layout = new StackPanel { Spacing = 14, Width = 540 };
+        // 不强制固定宽度：让 ContentDialog 自适应，避免窄屏时右侧内容被裁剪
+        var layout = new StackPanel { Spacing = 14, MinWidth = 400, MaxWidth = 520 };
+
+        // ── 已安装插件区 ──────────────────────────
+        layout.Children.Add(new TextBlock
+        {
+            Text = "已安装插件",
+            FontWeight = FontWeights.SemiBold,
+        });
+        layout.Children.Add(_installedStatus);
+        layout.Children.Add(new Border
+        {
+            Child = _installedPanel,
+            Padding = new Thickness(2),
+        });
 
         // ── 远程插件区 ────────────────────────────
         var remoteHeader = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -81,6 +105,7 @@ public sealed class PluginDialog : ContentDialog
 
         Loaded += async (_, _) =>
         {
+            await RenderInstalledAsync();
             await LoadRemoteAsync();
             RenderDisabled();
         };
@@ -131,6 +156,91 @@ public sealed class PluginDialog : ContentDialog
         }
     }
 
+    private async Task RenderInstalledAsync()
+    {
+        _installedPanel.Children.Clear();
+        var installed = await PluginManager.GetInstalledPluginsAsync();
+        if (installed.Count == 0)
+        {
+            _installedStatus.Text = "无";
+            return;
+        }
+        _installedStatus.Text = $"{installed.Count} 个（含内置模板 bundle）";
+        foreach (var pkg in installed)
+        {
+            _installedPanel.Children.Add(BuildInstalledRow(pkg));
+        }
+    }
+
+    private Border BuildInstalledRow(string packageName)
+    {
+        var isBuiltin = BuiltinBundles.Contains(packageName);
+        var name = new TextBlock
+        {
+            Text = packageName,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        if (isBuiltin)
+        {
+            right.Children.Add(new TextBlock { Text = "内置", FontSize = 11, Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center });
+        }
+        var uninstall = new Button
+        {
+            Content = "卸载",
+            MinWidth = 72,
+            IsEnabled = !isBuiltin,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        uninstall.Click += async (_, _) => await UninstallAsync(packageName, uninstall);
+        right.Children.Add(uninstall);
+
+        var grid = new Grid { ColumnSpacing = 10 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(name, 0);
+        Grid.SetColumn(right, 1);
+        grid.Children.Add(name);
+        grid.Children.Add(right);
+
+        return new Border
+        {
+            Child = grid,
+            Padding = new Thickness(10),
+            CornerRadius = new CornerRadius(6),
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+        };
+    }
+
+    private async Task UninstallAsync(string packageName, Button button)
+    {
+        button.IsEnabled = false;
+        button.Content = "卸载中…";
+        try
+        {
+            var result = await PluginManager.RemoveAsync(packageName);
+            if (result.Success)
+            {
+                button.Content = "已卸载 ✓";
+                await RenderInstalledAsync();
+                PluginsChanged?.Invoke();
+            }
+            else
+            {
+                await ShowMessageAsync($"卸载 {packageName} 失败", result.Output);
+                button.IsEnabled = true;
+                button.Content = "卸载";
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("卸载出错", ex.Message);
+            button.IsEnabled = true;
+            button.Content = "卸载";
+        }
+    }
+
     private Border BuildRemoteRow(RemotePlugin plugin)
     {
         var name = new TextBlock
@@ -151,6 +261,8 @@ public sealed class PluginDialog : ContentDialog
             FontSize = 12,
             Opacity = 0.75,
             TextWrapping = TextWrapping.Wrap,
+            MaxLines = 2,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
         var left = new StackPanel { Spacing = 2 };
         left.Children.Add(name);
@@ -222,6 +334,7 @@ public sealed class PluginDialog : ContentDialog
                 button.Content = "已安装 ✓";
                 _settings.DisabledPlugins.Remove(plugin.PackageName);
                 _settings.Save();
+                await RenderInstalledAsync();
                 RenderDisabled();
                 PluginsChanged?.Invoke();
             }
@@ -251,6 +364,7 @@ public sealed class PluginDialog : ContentDialog
             if (ok)
             {
                 button.Content = "已恢复 ✓";
+                await RenderInstalledAsync();
                 RenderDisabled();
                 PluginsChanged?.Invoke();
             }

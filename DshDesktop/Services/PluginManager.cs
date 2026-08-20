@@ -194,4 +194,38 @@ public static class PluginManager
         }
         return result.Success;
     }
+
+    /// <summary>读取 web profile 中已安装的插件（dsh.profile.bundles），含模板内置 bundle。</summary>
+    public static async Task<List<string>> GetInstalledPluginsAsync()
+    {
+        var list = new List<string>();
+        try
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var manifest = Path.Combine(home, ".dsh", "profiles", "web", "package.json");
+            if (!File.Exists(manifest))
+            {
+                return list;
+            }
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(manifest));
+            if (doc.RootElement.TryGetProperty("dsh", out var dsh)
+                && dsh.TryGetProperty("profile", out var profile)
+                && profile.TryGetProperty("bundles", out var bundles))
+            {
+                foreach (var item in bundles.EnumerateArray())
+                {
+                    var name = item.GetString();
+                    if (!string.IsNullOrEmpty(name) && !list.Contains(name))
+                    {
+                        list.Add(name);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // manifest 不存在或损坏时返回空
+        }
+        return list;
+    }
 }
