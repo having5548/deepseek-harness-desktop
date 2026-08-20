@@ -1,6 +1,6 @@
 # DeepSeek Harness 桌面客户端（Windows）
 
-基于 **WinUI 3** + **Microsoft Edge WebView2** 的桌面壳，将 DeepSeek Harness 的
+基于 **WinUI 3** + **WebView2** 的桌面壳，将 DeepSeek Harness 的
 Web UI（`dsh web`）包装成原生 Windows 应用，像安装普通软件一样使用。
 
 它启动一个本地的 `dsh web` 服务进程，并用 WebView2 把 `http://127.0.0.1:<port>` 的
