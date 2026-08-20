@@ -20,6 +20,8 @@ public sealed partial class MainWindow : Window
     private bool _handlingCrash;
     private string? _currentUrl;
     private CancellationTokenSource? _startTimeoutCts;
+    private bool _updatePromptShown;
+    private bool _updatingDsh;
 
     public MainWindow()
     {
@@ -87,7 +89,7 @@ public sealed partial class MainWindow : Window
 
     private void OnUrlReady(string url)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(async () =>
         {
             _startTimeoutCts?.Cancel();
             _currentUrl = url;
@@ -98,6 +100,7 @@ public sealed partial class MainWindow : Window
                 HideStatus();
                 WebView.Source = new Uri(url);
             }
+            await CheckForDshUpdateAsync();
         });
     }
 
@@ -154,12 +157,17 @@ public sealed partial class MainWindow : Window
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsDialog(_settings.DshPath, this);
+        var dialog = new SettingsDialog(
+            _settings.DshPath,
+            _settings.CheckForUpdatesOnStartup,
+            DshUpdater.GetLocalVersion(),
+            this);
         dialog.XamlRoot = Content.XamlRoot;
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {
             _settings.DshPath = dialog.DshPath;
+            _settings.CheckForUpdatesOnStartup = dialog.CheckForUpdates;
             _settings.Save();
             await RestartHostAsync();
         }
@@ -278,6 +286,118 @@ public sealed partial class MainWindow : Window
             }
             await RestartHostAsync();
         }
+    }
+
+    // ── dsh 自动更新：启动时检测 + 弹窗询问 + 升级 ────────────
+
+    /// <summary>服务就绪后自动检查 dsh 新版本；发现新版弹窗询问，用户确认后升级并重启。</summary>
+    private async Task CheckForDshUpdateAsync()
+    {
+        if (_updatePromptShown || _updatingDsh || !_settings.CheckForUpdatesOnStartup)
+        {
+            return;
+        }
+        _updatePromptShown = true; // 每次会话只询问一次
+
+        DshUpdateInfo info;
+        try
+        {
+            info = await DshUpdater.CheckForUpdateAsync();
+        }
+        catch
+        {
+            return;
+        }
+
+        if (!info.IsUpdateAvailable)
+        {
+            return;
+        }
+
+        var result = await ShowUpdateDialogAsync(info);
+        if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(info.LatestVersion))
+        {
+            await UpgradeDshAsync(info.LatestVersion);
+        }
+    }
+
+    private async Task<ContentDialogResult> ShowUpdateDialogAsync(DshUpdateInfo info)
+    {
+        var panel = new StackPanel { Spacing = 10, Width = 420 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"检测到 DeepSeek Harness (dsh) 新版本：\n{info.LocalVersion} → {info.LatestVersion}",
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "升级需要联网下载，完成后会自动重启服务。是否现在升级？",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Opacity = 0.85,
+        });
+
+        var dialog = new ContentDialog
+        {
+            Title = "发现新版本",
+            Content = panel,
+            PrimaryButtonText = "立即升级",
+            CloseButtonText = "稍后再说",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        return await dialog.ShowAsync();
+    }
+
+    private async Task UpgradeDshAsync(string version)
+    {
+        if (_updatingDsh)
+        {
+            return;
+        }
+        _updatingDsh = true;
+        try
+        {
+            ServiceStateText.Text = "正在升级 dsh…";
+            ShowStatus("正在升级 DeepSeek Harness…", $"下载并安装 dsh {version}，请稍候。");
+            _host.Stop();
+            _navigatedToApp = false;
+            _currentUrl = null;
+
+            var (success, output) = await DshUpdater.UpgradeAsync(version);
+            if (!success)
+            {
+                await ShowMessageDialogAsync("dsh 升级失败", string.IsNullOrWhiteSpace(output) ? "未知错误" : output);
+                await RestartHostAsync();
+                return;
+            }
+
+            await RestartHostAsync();
+            await ShowMessageDialogAsync("升级完成", $"dsh 已成功升级到 {version}。");
+        }
+        finally
+        {
+            _updatingDsh = false;
+        }
+    }
+
+    private async Task ShowMessageDialogAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock
+            {
+                Text = message,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 420,
+                MaxHeight = 360,
+            },
+            CloseButtonText = "确定",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     // ── 生命周期 ────────────────────────────────────────────

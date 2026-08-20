@@ -12,6 +12,8 @@ if not defined NODE (
   exit /b 1
 )
 echo Using node: %NODE%
+rem 由 node.exe 路径推导其安装目录（含 npm 发行目录）
+for %%i in ("%NODE%") do set "NODE_DIR=%%~dpi"
 set "CUR=%CD%"
 
 rem 1. reinstall bundled dsh with --omit=dev (prod deps only)
@@ -40,6 +42,16 @@ if not exist "%RT%\node.exe" copy /Y "%NODE%" "%RT%\node.exe" >nul
 if not exist "%RT%\vcruntime140.dll" copy /Y "%WINDIR%\System32\vcruntime140.dll" "%RT%\vcruntime140.dll" >nul 2>nul
 if not exist "%RT%\vcruntime140_1.dll" copy /Y "%WINDIR%\System32\vcruntime140_1.dll" "%RT%\vcruntime140_1.dll" >nul 2>nul
 if not exist "%RT%\msvcp140.dll" copy /Y "%WINDIR%\System32\msvcp140.dll" "%RT%\msvcp140.dll" >nul 2>nul
+
+rem 4. bundle npm distribution into the runtime (enables in-app dsh self-upgrade
+rem    without requiring npm installed on the target machine)
+set "NPM_SRC=%NODE_DIR%node_modules\npm"
+if exist "%NPM_SRC%\bin\npm-cli.js" (
+  robocopy "%NPM_SRC%" "%RT%\node_modules\npm" /E /NFL /NDL /NJH /NJS /NP >nul
+  echo npm bundled: "%RT%\node_modules\npm\bin\npm-cli.js"
+) else (
+  echo WARNING: npm distribution not found at "%NPM_SRC%"; in-app dsh upgrade will be unavailable
+)
 
 echo === node version ===
 "%RT%\node.exe" --version

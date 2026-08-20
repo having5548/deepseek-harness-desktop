@@ -6,7 +6,7 @@
 
 > 把 DeepSeek Harness 装进一个原生 Windows 窗口 —— **安装即用，像用普通软件一样简单**。
 
-![版本](https://img.shields.io/badge/版本-0.2.0-2b6cb0)
+![版本](https://img.shields.io/badge/版本-0.3.0-2b6cb0)
 ![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-0078d4)
 ![框架](https://img.shields.io/badge/.NET-8.0-512bd4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%20%2B%20dsh-4ea04e)
@@ -42,7 +42,7 @@
 
 ## 📥 安装
 
-双击 `artifacts/DshDesktop-Setup-0.2.0.exe`，按向导一路「下一步」即可，无需管理员权限。
+双击 `artifacts/DshDesktop-Setup-0.3.0.exe`，按向导一路「下一步」即可，无需管理员权限。
 安装时若检测到缺少 WebView2 Runtime 会给出提示。
 
 > 免安装版：`artifacts/win-x64/DshDesktop.exe`，解压即用。
@@ -108,7 +108,7 @@ scripts\build-all.cmd
 
 产物：
 - `artifacts/win-x64/DshDesktop.exe` — 免安装直接运行（含捆绑运行时）
-- `artifacts/DshDesktop-Setup-0.2.0.exe` — 安装器
+- `artifacts/DshDesktop-Setup-0.3.0.exe` — 安装器
 
 仅需开发调试：
 

@@ -2,7 +2,7 @@
 
 > DeepSeek Harness in a native Windows window — **install and go, as easy as any normal app**.
 
-![Version](https://img.shields.io/badge/version-0.2.0-2b6cb0)
+![Version](https://img.shields.io/badge/version-0.3.0-2b6cb0)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
 ![Framework](https://img.shields.io/badge/.NET-8.0-512bd4)
 ![Runtime](https://img.shields.io/badge/runtime-Bundled%20Node.js%20%2B%20dsh-4ea04e)
@@ -39,7 +39,7 @@ everything up when you quit — no leftover processes.
 
 ## 📥 Installation
 
-Double-click `artifacts/DshDesktop-Setup-0.2.0.exe` and follow the wizard — no admin rights needed.
+Double-click `artifacts/DshDesktop-Setup-0.3.0.exe` and follow the wizard — no admin rights needed.
 The installer will warn you if the WebView2 Runtime is missing.
 
 > Portable version: `artifacts/win-x64/DshDesktop.exe` — unzip and run.
@@ -107,7 +107,7 @@ scripts\build-all.cmd
 
 Artifacts:
 - `artifacts/win-x64/DshDesktop.exe` — portable, run directly (includes bundled runtime)
-- `artifacts/DshDesktop-Setup-0.2.0.exe` — installer
+- `artifacts/DshDesktop-Setup-0.3.0.exe` — installer
 
 Just for dev/debug:
 

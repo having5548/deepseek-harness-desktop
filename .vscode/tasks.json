@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "package-release",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"${workspaceFolder}\\scripts\\build-publish.cmd"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

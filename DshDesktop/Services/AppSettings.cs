@@ -13,6 +13,9 @@ public sealed class AppSettings
 {
     public string? DshPath { get; set; }
 
+    /// <summary>启动时自动检查 dsh 新版本（发现新版弹窗询问是否升级）。</summary>
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+
     /// <summary>因加载失败被自动屏蔽的插件（npm 包名）。</summary>
     public List<string> DisabledPlugins { get; set; } = new();
 
