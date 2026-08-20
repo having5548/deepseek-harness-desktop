@@ -1,43 +1,79 @@
-# DeepSeek Harness 桌面客户端一键构建脚本
-# 用法: powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+# DeepSeek Harness Desktop one-click build script
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
-    [string]$IsccPath = "C:\Program Files\Inno Setup 7\ISCC.exe"
+    [string]$IsccPath = ""
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# PSScriptRoot = scripts\ dir; its parent is the repo root
+$root = Split-Path -Parent $PSScriptRoot
 $csproj = Join-Path $root "DshDesktop\DshDesktop.csproj"
 $publishDir = Join-Path $root "artifacts\$Runtime"
 $iss = Join-Path $root "installer\setup.iss"
 
-# 使用完整路径，避免 PATH 异常
-$dotnet = "C:\Program Files\dotnet\dotnet.exe"
-$cmd = "C:\Windows\System32\cmd.exe"
+# Resolve tools from PATH (no hardcoded install paths)
+function Resolve-Tool([string]$name) {
+    $c = Get-Command $name -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    return $null
+}
 
-# 1. 图标缺失时生成
+$dotnet = Resolve-Tool "dotnet"
+if (-not $dotnet) { throw "dotnet not found on PATH. Install .NET SDK and add it to PATH." }
+
+$cmd = Resolve-Tool "cmd"
+if (-not $cmd) { $cmd = "cmd" }
+
+# ISCC is usually not on PATH: allow -IsccPath override, else PATH, else probe common install dirs
+if (-not $IsccPath) {
+    $iscc = Resolve-Tool "iscc"
+    if (-not $iscc) {
+        foreach ($p in @(
+            "C:\Program Files\Inno Setup 7\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            if (Test-Path $p) { $iscc = $p; break }
+        }
+    }
+    $IsccPath = $iscc
+}
+if (-not $IsccPath) { throw "ISCC.exe not found. Install Inno Setup and add it to PATH, or pass -IsccPath." }
+
+Write-Host "dotnet: $dotnet"
+Write-Host "iscc:   $IsccPath"
+
+# 1. Generate icon if missing
 $icon = Join-Path $root "DshDesktop\Assets\AppIcon.ico"
 if (-not (Test-Path $icon)) {
-    Write-Host "[1/4] 生成应用图标…"
+    Write-Host "[1/4] Generating app icon..."
     & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\generate-icon.ps1")
 }
 
-# 2. 准备捆绑运行时（node + dsh），实现打开即用
-Write-Host "[2/4] 准备捆绑运行时（node + @deepseek-ai/dsh）…"
+# 2. Prepare bundled runtime (node + dsh) for out-of-box experience
+Write-Host "[2/4] Preparing bundled runtime (node + @deepseek-ai/dsh)..."
 & $cmd /c (Join-Path $root "scripts\prepare-runtime.cmd")
+if ($LASTEXITCODE -ne 0) { throw "prepare-runtime failed (exit $LASTEXITCODE)" }
 
-# 3. 自包含发布（目标机器无需安装 .NET / Windows App SDK 运行时）
-Write-Host "[3/4] dotnet publish ($Configuration / $Runtime, self-contained)…"
+# 3. Self-contained publish (target machine needs no .NET / Windows App SDK runtime)
+Write-Host "[3/4] dotnet publish ($Configuration / $Runtime, self-contained)..."
 & $dotnet publish $csproj -c $Configuration -r $Runtime --self-contained true -p:PublishDir=$publishDir
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失败 (exit $LASTEXITCODE)" }
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
 
-# 4. Inno Setup 编译安装器
-if (-not (Test-Path $IsccPath)) { throw "未找到 ISCC.exe: $IsccPath" }
-Write-Host "[4/4] Inno Setup 编译安装器…"
+# 3b. Copy bundled runtime into publish dir
+Write-Host "[3b/4] Copying bundled runtime into publish dir..."
+$srcRuntime = Join-Path $root "DshDesktop\runtime"
+$dstRuntime = Join-Path $publishDir "runtime"
+& $cmd /c "robocopy `"$srcRuntime`" `"$dstRuntime`" /E /NFL /NDL /NJH /NJS /NP >nul"
+if ($LASTEXITCODE -gt 7) { throw "robocopy failed (exit $LASTEXITCODE)" }
+
+# 4. Inno Setup compile installer
+Write-Host "[4/4] Compiling installer with Inno Setup..."
 & $IsccPath $iss
-if ($LASTEXITCODE -ne 0) { throw "ISCC 编译失败 (exit $LASTEXITCODE)" }
+if ($LASTEXITCODE -ne 0) { throw "ISCC compile failed (exit $LASTEXITCODE)" }
 
 Write-Host ""
-Write-Host "完成。安装包位于:"
+Write-Host "Done. Installer located at:"
 Get-ChildItem (Join-Path $root "artifacts") -Filter "DshDesktop-Setup-*.exe" | Select-Object FullName, @{n="SizeMB";e={[math]::Round($_.Length/1MB,1)}}

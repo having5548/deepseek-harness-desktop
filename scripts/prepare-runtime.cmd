@@ -1,12 +1,22 @@
 @echo off
 rem Prepare bundled runtime: install dsh (prod deps), copy node + VC++ runtime.
-setlocal
-set "RT=d:\software\deepseek-harness\desktop\DshDesktop\runtime"
-set "NODE=C:\Program Files\nodejs\node.exe"
+setlocal EnableDelayedExpansion
+rem 从脚本位置推导仓库根目录（scripts\ 的上一级），支持任意工作区路径
+set "RT=%~dp0..\DshDesktop\runtime"
+
+rem 通过 PATH 定位 node（不写死安装路径）
+set "NODE="
+for /f "delims=" %%i in ('where node 2^>nul') do if not defined NODE set "NODE=%%i"
+if not defined NODE (
+  echo NODE_NOT_FOUND: 未在 PATH 中找到 node，请安装 Node.js 并加入 PATH
+  exit /b 1
+)
+echo Using node: %NODE%
 set "CUR=%CD%"
 
 rem 1. reinstall bundled dsh with --omit=dev (prod deps only)
 rem    allow-scripts: node-pty/koffi/subprocess helper are native deps needed at runtime
+if not exist "%RT%" mkdir "%RT%"
 if exist "%RT%\node_modules" rd /s /q "%RT%\node_modules"
 cd /d "%RT%"
 call npm install -g --prefix "%RT%" --omit=dev --no-audit --no-fund --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs @deepseek-ai/dsh
