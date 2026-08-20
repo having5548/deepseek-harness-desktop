@@ -6,12 +6,20 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace DshDesktop.Services;
 
-/// <summary>远程插件信息（来自 GitHub `dsh-plugin` 主题）。</summary>
-public sealed record RemotePlugin(string PackageName, string RepoFullName, string? Description, int Stars);
+/// <summary>远程插件信息（来自 DSH Market）。</summary>
+public sealed record RemotePlugin(
+    string PackageName,
+    string RepoFullName,
+    string? Description,
+    int Stars,
+    int Score,
+    bool NeedsConfig,
+    string InstallSpec);
 
 /// <summary>dsh plugin 命令执行结果。</summary>
 public sealed record PluginCommandResult(bool Success, string Output);
@@ -26,8 +34,12 @@ public sealed record PluginCommandResult(bool Success, string Output);
 /// </summary>
 public static class PluginManager
 {
-    private const string GitHubSearchUrl =
-        "https://api.github.com/search/repositories?q=topic:dsh-plugin&sort=stars&order=desc&per_page=50";
+    /// <summary>DSH Market 数据源（Web 站与插件版共用，每日更新）。</summary>
+    private const string DshMarketDataUrl =
+        "https://raw.githubusercontent.com/2BingLing/dsh-market/master/data/plugins.json";
+
+    /// <summary>列表中最多展示的插件数（按实用分取高分）。</summary>
+    private const int MaxPlugins = 100;
 
     private static readonly HttpClient Http = CreateHttpClient();
 
@@ -35,44 +47,32 @@ public static class PluginManager
     {
         var client = new HttpClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("dsh-desktop");
-        client.Timeout = TimeSpan.FromSeconds(20);
+        client.Timeout = TimeSpan.FromSeconds(30);
         return client;
     }
 
-    /// <summary>从 GitHub 发现 dsh 插件列表。会读取每个仓库的 package.json 以获取真实 npm 包名。</summary>
+    /// <summary>
+    /// 从 DSH Market 拉取可一键安装的插件：解析 <c>install.commands</c> 中的
+    /// <c>dsh plugin add &lt;spec&gt;</c> 得到安装包，按实用分排序取高分前 <see cref="MaxPlugins"/> 个。
+    /// </summary>
     public static async Task<List<RemotePlugin>> FetchRemotePluginsAsync()
     {
         var plugins = new List<RemotePlugin>();
         try
         {
-            var search = await Http.GetStringAsync(GitHubSearchUrl);
-            using var doc = JsonDocument.Parse(search);
-            if (!doc.RootElement.TryGetProperty("items", out var items))
+            var json = await Http.GetStringAsync(DshMarketDataUrl);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("plugins", out var items))
             {
                 return plugins;
             }
 
-            // 并行读取 package.json，避免串行拖慢
-            var tasks = items.EnumerateArray().Select(async item =>
+            foreach (var item in items.EnumerateArray())
             {
-                var fullName = item.TryGetProperty("full_name", out var fn) ? fn.GetString() : null;
-                var description = item.TryGetProperty("description", out var d) ? d.GetString() : null;
-                var stars = item.TryGetProperty("stargazers_count", out var s) ? s.GetInt32() : 0;
-                var branch = item.TryGetProperty("default_branch", out var b) ? b.GetString() ?? "main" : "main";
-                if (string.IsNullOrEmpty(fullName) || fullName.Equals("deepseek-ai/deepseek-harness", StringComparison.OrdinalIgnoreCase))
+                var plugin = ParseRemotePlugin(item);
+                if (plugin is not null)
                 {
-                    return (RemotePlugin?)null;
-                }
-                var pkgName = await TryReadPackageNameAsync(fullName, branch);
-                return string.IsNullOrEmpty(pkgName) ? null : new RemotePlugin(pkgName, fullName, description, stars);
-            }).ToList();
-
-            foreach (var task in tasks)
-            {
-                var result = await task;
-                if (result is not null)
-                {
-                    plugins.Add(result);
+                    plugins.Add(plugin);
                 }
             }
         }
@@ -80,26 +80,104 @@ public static class PluginManager
         {
             // 网络失败时返回已收集的部分结果
         }
-        return plugins;
+        return plugins
+            .OrderByDescending(p => p.Score)
+            .ThenByDescending(p => p.Stars)
+            .Take(MaxPlugins)
+            .ToList();
     }
 
-    private static async Task<string?> TryReadPackageNameAsync(string fullName, string branch)
+    private static RemotePlugin? ParseRemotePlugin(JsonElement item)
     {
-        try
+        var name = GetString(item, "name");
+        var fullName = GetString(item, "fullName") ?? GetString(item, "id");
+        var descriptionZh = GetString(item, "descriptionZh");
+        var description = GetString(item, "description");
+        var stars = GetInt(item, "stars");
+        var score = GetInt(item, "score", "total");
+        var needsConfig = GetBool(item, "install", "needsConfig");
+        var installSpec = ParseInstallSpec(item);
+
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(installSpec))
         {
-            var url = $"https://raw.githubusercontent.com/{fullName}/{branch}/package.json";
-            var json = await Http.GetStringAsync(url);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("name", out var name))
+            return null; // 无法通过 `dsh plugin add` 安装的（如 skill 型）跳过
+        }
+        return new RemotePlugin(
+            name,
+            fullName ?? name,
+            descriptionZh ?? description,
+            stars,
+            score,
+            needsConfig,
+            installSpec);
+    }
+
+    /// <summary>从 <c>install.commands</c> 提取 <c>dsh plugin ... add &lt;spec&gt;</c> 中的安装包 spec。</summary>
+    private static string? ParseInstallSpec(JsonElement item)
+    {
+        if (!item.TryGetProperty("install", out var install)
+            || !install.TryGetProperty("commands", out var commands)
+            || commands.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+        foreach (var cmd in commands.EnumerateArray())
+        {
+            var text = cmd.GetString();
+            if (string.IsNullOrEmpty(text))
             {
-                return name.GetString();
+                continue;
+            }
+            var match = Regex.Match(text, @"\badd\s+(\S+)");
+            if (match.Success)
+            {
+                var spec = match.Groups[1].Value.Trim().Trim('"', '\'');
+                if (spec.Length > 0)
+                {
+                    return spec;
+                }
             }
         }
-        catch
-        {
-            // 仓库无 package.json 或不可访问 → 不是可安装插件
-        }
         return null;
+    }
+
+    private static string? GetString(JsonElement element, params string[] path)
+    {
+        var current = element;
+        foreach (var p in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(p, out current))
+            {
+                return null;
+            }
+        }
+        return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
+    }
+
+    private static int GetInt(JsonElement element, params string[] path)
+    {
+        var current = element;
+        foreach (var p in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(p, out current))
+            {
+                return 0;
+            }
+        }
+        return current.ValueKind == JsonValueKind.Number ? current.GetInt32() : 0;
+    }
+
+    private static bool GetBool(JsonElement element, params string[] path)
+    {
+        var current = element;
+        foreach (var p in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(p, out current))
+            {
+                return false;
+            }
+        }
+        return current.ValueKind == JsonValueKind.True;
     }
 
     /// <summary>执行 <c>dsh plugin --profile web &lt;args...&gt;</c>，并把捆绑运行时目录注入 PATH 以便找到 pnpm。</summary>

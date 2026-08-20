@@ -71,7 +71,7 @@ public sealed class PluginDialog : ContentDialog
         var remoteHeader = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         remoteHeader.Children.Add(new TextBlock
         {
-            Text = "从 GitHub「dsh-plugin」主题发现",
+            Text = "从 DSH Market 获取",
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -114,18 +114,18 @@ public sealed class PluginDialog : ContentDialog
     private async Task LoadRemoteAsync()
     {
         _refreshButton.IsEnabled = false;
-        _remoteStatus.Text = "正在从 GitHub 获取插件列表…";
+        _remoteStatus.Text = "正在从 DSH Market 获取插件列表…";
         _remotePanel.Children.Clear();
         try
         {
             var plugins = await PluginManager.FetchRemotePluginsAsync();
             if (plugins.Count == 0)
             {
-                _remoteStatus.Text = "未获取到插件（网络或限流问题），可点击刷新重试。";
+                _remoteStatus.Text = "未获取到插件（网络或数据源问题），可点击刷新重试。";
                 return;
             }
-            _remoteStatus.Text = $"共 {plugins.Count} 个候选插件（按 Stars 排序，已过滤非插件仓库）";
-            foreach (var p in plugins.OrderByDescending(p => p.Stars))
+            _remoteStatus.Text = $"共 {plugins.Count} 个可一键安装插件（按实用分排序）";
+            foreach (var p in plugins)
             {
                 _remotePanel.Children.Add(BuildRemoteRow(p));
             }
@@ -251,7 +251,7 @@ public sealed class PluginDialog : ContentDialog
         };
         var meta = new TextBlock
         {
-            Text = $"{plugin.RepoFullName} · ⭐ {plugin.Stars}",
+            Text = $"{(plugin.NeedsConfig ? "需配置 · " : "")}{plugin.RepoFullName} · ⭐{plugin.Stars} · 实用分 {plugin.Score}",
             FontSize = 11,
             Opacity = 0.6,
         };
@@ -328,7 +328,7 @@ public sealed class PluginDialog : ContentDialog
         button.Content = "安装中…";
         try
         {
-            var result = await PluginManager.InstallAsync(plugin.PackageName);
+            var result = await PluginManager.InstallAsync(plugin.InstallSpec);
             if (result.Success)
             {
                 button.Content = "已安装 ✓";
