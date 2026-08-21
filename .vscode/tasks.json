@@ -11,17 +11,6 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
-		},
-		{
-			"label": "git-push",
-			"type": "shell",
-			"command": "cmd",
-			"args": [
-				"/c",
-				"c:\\Users\\a2736\\AppData\\Local\\Temp\\dsh-gitpush.cmd"
-			],
-			"isBackground": false,
-			"problemMatcher": []
 		}
 	]
 }
