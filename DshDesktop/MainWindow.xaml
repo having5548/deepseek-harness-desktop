@@ -37,6 +37,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                     <TextBlock x:Name="ServiceStateText" Text="服务未运行" FontSize="12" Opacity="0.7"
                                VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Button x:Name="CheckUpdateButton" Click="CheckUpdateButton_Click" ToolTipService.ToolTip="检查更新" Padding="8,4">
+                        <FontIcon Glyph="&#xE896;" FontSize="14" />
+                    </Button>
                     <Button x:Name="PluginsButton" Click="PluginsButton_Click" ToolTipService.ToolTip="插件管理" Padding="8,4">
                         <FontIcon Glyph="&#xE950;" FontSize="14" />
                     </Button>

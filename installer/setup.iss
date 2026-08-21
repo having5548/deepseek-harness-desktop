@@ -1,7 +1,7 @@
 ; DeepSeek Harness 桌面客户端安装脚本 (Inno Setup 7)
 ; 用法: iscc.exe setup.iss
 #define MyAppName "DeepSeek Harness Desktop"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.4.0"
 #define MyAppPublisher "DeepSeek AI"
 #define MyAppExeName "DshDesktop.exe"
 #define SourceDir "..\artifacts\win-x64"

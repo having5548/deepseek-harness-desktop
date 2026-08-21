@@ -185,6 +185,11 @@ public sealed partial class MainWindow : Window
         await dialog.ShowAsync();
     }
 
+    private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        await CheckForDshUpdateAsync(manual: true);
+    }
+
     // ── 崩溃处理：自动屏蔽报错插件 + 重启 + 弹窗 ───────────
 
     private void OnCrash(CrashInfo crash)
@@ -290,14 +295,20 @@ public sealed partial class MainWindow : Window
 
     // ── dsh 自动更新：启动时检测 + 弹窗询问 + 升级 ────────────
 
-    /// <summary>服务就绪后自动检查 dsh 新版本；发现新版弹窗询问，用户确认后升级并重启。</summary>
-    private async Task CheckForDshUpdateAsync()
+    /// <summary>
+    /// 检查 dsh 新版本。自动模式（启动时）仅在发现新版时弹窗询问一次；
+    /// 手动模式（工具栏按钮）总是给出明确结果（有新版 → 询问；无新版 → 已是最新；无网络 → 失败提示）。
+    /// </summary>
+    private async Task CheckForDshUpdateAsync(bool manual = false)
     {
-        if (_updatePromptShown || _updatingDsh || !_settings.CheckForUpdatesOnStartup)
+        if (_updatingDsh)
         {
             return;
         }
-        _updatePromptShown = true; // 每次会话只询问一次
+        if (!manual && (_updatePromptShown || !_settings.CheckForUpdatesOnStartup))
+        {
+            return;
+        }
 
         DshUpdateInfo info;
         try
@@ -306,33 +317,55 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
+            if (manual)
+            {
+                await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源，请检查网络后重试。");
+            }
+            return;
+        }
+
+        // 所有源均不可达（未选到任何 registry）
+        if (info.RegistryName is null)
+        {
+            if (manual)
+            {
+                await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源（官方与国内镜像均不可达），请检查网络后重试。");
+            }
             return;
         }
 
         if (!info.IsUpdateAvailable)
         {
+            if (manual)
+            {
+                var src = info.LatencyMs is { } ms ? $"（{info.RegistryName}，{ms}ms）" : $"（{info.RegistryName}）";
+                await ShowMessageDialogAsync("已是最新版本", $"当前 dsh 版本：{info.LocalVersion}\n更新源：{src}");
+            }
             return;
         }
+
+        _updatePromptShown = true; // 本次会话不再重复自动询问
 
         var result = await ShowUpdateDialogAsync(info);
         if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(info.LatestVersion))
         {
-            await UpgradeDshAsync(info.LatestVersion);
+            await UpgradeDshAsync(info.LatestVersion, info.RegistryName, info.RegistryUrl);
         }
     }
 
     private async Task<ContentDialogResult> ShowUpdateDialogAsync(DshUpdateInfo info)
     {
-        var panel = new StackPanel { Spacing = 10, Width = 420 };
+        var panel = new StackPanel { Spacing = 10, Width = 440 };
         panel.Children.Add(new TextBlock
         {
             Text = $"检测到 DeepSeek Harness (dsh) 新版本：\n{info.LocalVersion} → {info.LatestVersion}",
             TextWrapping = TextWrapping.Wrap,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
+        var src = info.LatencyMs is { } ms ? $"（{info.RegistryName}，{ms}ms）" : $"（{info.RegistryName}）";
         panel.Children.Add(new TextBlock
         {
-            Text = "升级需要联网下载，完成后会自动重启服务。是否现在升级？",
+            Text = $"升级需要联网下载，完成后会自动重启服务。是否现在升级？\n更新源：{src}",
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12,
             Opacity = 0.85,
@@ -350,25 +383,96 @@ public sealed partial class MainWindow : Window
         return await dialog.ShowAsync();
     }
 
-    private async Task UpgradeDshAsync(string version)
+    private async Task UpgradeDshAsync(string version, string? registryName, string? registryUrl)
     {
         if (_updatingDsh)
         {
             return;
         }
         _updatingDsh = true;
+        var cts = new CancellationTokenSource();
         try
         {
-            ServiceStateText.Text = "正在升级 dsh…";
-            ShowStatus("正在升级 DeepSeek Harness…", $"下载并安装 dsh {version}，请稍候。");
+            var statusText = new TextBlock
+            {
+                Text = "准备升级…",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                MaxHeight = 200,
+            };
+            var panel = new StackPanel { Spacing = 12, Width = 460 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"{DshUpdater.GetLocalVersion() ?? "?"} → {version}" +
+                       (registryName is null ? "" : $"\n更新源：{registryName}"),
+                TextWrapping = TextWrapping.Wrap,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            });
+            panel.Children.Add(new ProgressRing
+            {
+                IsActive = true,
+                Width = 32,
+                Height = 32,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            panel.Children.Add(statusText);
+
+            var dialog = new ContentDialog
+            {
+                Title = "正在升级 dsh…",
+                Content = panel,
+                CloseButtonText = "取消",
+                XamlRoot = Content.XamlRoot,
+            };
+            var upgradeFinished = false;
+            dialog.Closed += (_, _) =>
+            {
+                if (!upgradeFinished)
+                {
+                    cts.Cancel();
+                }
+            };
+            _ = dialog.ShowAsync();
+
+            var progress = new Progress<string>(line =>
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    statusText.Text = line;
+                }
+            });
+
+            // 停止服务，避免升级过程中占用运行文件
             _host.Stop();
             _navigatedToApp = false;
             _currentUrl = null;
 
-            var (success, output) = await DshUpdater.UpgradeAsync(version);
-            if (!success)
+            var result = await DshUpdater.UpgradeAsync(
+                version,
+                registryUrl ?? "https://registry.npmjs.org/",
+                progress,
+                cts.Token);
+
+            upgradeFinished = true;
+            try
             {
-                await ShowMessageDialogAsync("dsh 升级失败", string.IsNullOrWhiteSpace(output) ? "未知错误" : output);
+                dialog.Hide();
+            }
+            catch
+            {
+                // 弹窗可能已被用户关闭
+            }
+
+            if (result.Cancelled)
+            {
+                await ShowMessageDialogAsync("升级已取消", result.Output);
+                await RestartHostAsync();
+                return;
+            }
+
+            if (!result.Success)
+            {
+                await ShowMessageDialogAsync("dsh 升级失败", string.IsNullOrWhiteSpace(result.Output) ? "未知错误" : result.Output);
                 await RestartHostAsync();
                 return;
             }
@@ -379,6 +483,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             _updatingDsh = false;
+            cts.Dispose();
         }
     }
 
