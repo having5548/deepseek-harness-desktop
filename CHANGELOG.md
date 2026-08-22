@@ -5,6 +5,32 @@
 
 ---
 
+## [0.5.0] — 2026-08-22
+
+### 🇬🇧 English
+
+✨ **What's New**
+- **Multiple plugin sources** — plugins now come from three trusted sources (DSH Market, official npm registry, npmmirror mirror); a failed source no longer breaks the whole list.
+- **Switch / stack sources** — choose "single source" or "multi-source merge" right in the plugin dialog; your choice is remembered.
+- **Smart deduplication** — the same plugin found in several sources is matched by its GitHub repository link + author and shown only once, merging the best info.
+- **Source labels** — every plugin shows which source(s) it came from.
+- **One-click GitHub** — a GitHub button next to each install button jumps straight to the plugin's repository.
+- **Regex search** — search the plugin list by regular expression against package names.
+- **Offline cache** — the merged plugin list is persisted to a single local JSON file and refreshed on every update; if all sources fail, the last cached list is still shown.
+
+### 🇨🇳 中文
+
+✨ **新功能**
+- **多插件来源** —— 插件来源扩展为三个可信源（DSH Market / npm 官方 / npmmirror 镜像），单一来源故障不再导致整个列表不可用。
+- **来源切换 / 多源叠加** —— 在插件对话框中可选「单来源」或「多来源叠加」，选择会被记住。
+- **智能去重** —— 同一插件在多个来源出现时，按 GitHub 仓库链接 + 作者自动匹配，只显示一个并合并最优信息。
+- **来源标识** —— 每个插件都标注来自哪个（些）来源。
+- **一键 GitHub** —— 每个插件的安装按钮旁新增 GitHub 按钮，一键跳转到插件仓库。
+- **正则搜索** —— 按插件名使用正则表达式过滤搜索。
+- **离线缓存** —— 整合后的插件列表持久化为单一本地 JSON 文件，每次刷新自动更新；全部来源不可用时仍可显示上次的缓存列表。
+
+---
+
 ## [0.4.0] — 2026-08-21
 
 ### 🇬🇧 English

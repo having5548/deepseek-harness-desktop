@@ -19,6 +19,15 @@ public sealed class AppSettings
     /// <summary>因加载失败被自动屏蔽的插件（npm 包名）。</summary>
     public List<string> DisabledPlugins { get; set; } = new();
 
+    /// <summary>插件来源模式："multi" = 多来源叠加（默认），"single" = 单来源。</summary>
+    public string PluginSourceMode { get; set; } = "multi";
+
+    /// <summary>单来源模式下选中的来源 Id（见 PluginManager.AllSources）。</summary>
+    public string SelectedPluginSource { get; set; } = "dsh-market";
+
+    /// <summary>多来源叠加模式下启用的来源 Id 列表。</summary>
+    public List<string> EnabledPluginSources { get; set; } = new() { "dsh-market", "npm", "npmmirror" };
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "DshDesktop",
