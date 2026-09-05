@@ -4,9 +4,12 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using DshDesktop.Services;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
+using WinRT.Interop;
 
 namespace DshDesktop;
 
@@ -22,6 +25,9 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _startTimeoutCts;
     private bool _updatePromptShown;
     private bool _updatingDsh;
+    private bool _titleBarReady;
+    private readonly List<string> _startupLog = new();
+    private const int MaxStartupLogLines = 300;
 
     public MainWindow()
     {
@@ -30,6 +36,7 @@ public sealed partial class MainWindow : Window
         _settings = AppSettings.Load();
 
         _host.UrlReady += OnUrlReady;
+        _host.Output += OnHostOutput;
         _host.Error += OnHostError;
         _host.Exited += OnHostExited;
         _host.Crashed += OnCrash;
@@ -40,6 +47,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnActivated(object sender, WindowActivatedEventArgs args)
     {
+        SetupAppTitleBar();
         if (!_initialized)
         {
             _initialized = true;
@@ -67,6 +75,7 @@ public sealed partial class MainWindow : Window
 
             ServiceStateText.Text = "正在启动服务…";
             ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
+            BeginStartupLog();
             _host.Start(runtime);
         }
         catch (Exception ex)
@@ -104,23 +113,32 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private void OnHostOutput(string line)
+    {
+        DispatcherQueue.TryEnqueue(() => AppendStartupLog(line));
+    }
+
     private void OnHostError(string line)
     {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!_navigatedToApp)
-            {
-                StatusDetail.Text = line;
-            }
-        });
+        DispatcherQueue.TryEnqueue(() => AppendStartupLog(line));
     }
 
     private void OnHostExited(int code)
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            _startTimeoutCts?.Cancel();
             ServiceStateText.Text = $"服务已退出 ({code})";
-            if (_navigatedToApp)
+            if (!_navigatedToApp)
+            {
+                // 启动阶段即退出：立刻给出失败提示并保留日志，方便定位原因
+                ShowStatus(
+                    "服务启动失败",
+                    $"dsh 进程启动后随即退出（退出码 {code}）。\n请查看下方启动日志定位原因，可点击工具栏「重新加载」重试，或在设置中指定其他 dsh 路径。",
+                    isError: true);
+                StartupLogBorder.Visibility = Visibility.Visible;
+            }
+            else
             {
                 ShowStatus(
                     "DeepSeek Harness 服务已退出",
@@ -525,6 +543,7 @@ public sealed partial class MainWindow : Window
             }
             ServiceStateText.Text = "正在启动服务…";
             ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
+            BeginStartupLog();
             _host.Start(runtime);
             ArmStartTimeout();
         }
@@ -584,6 +603,83 @@ public sealed partial class MainWindow : Window
         {
             // 忽略打开失败
         }
+    }
+
+    // ── 一体化标题栏 ──────────────────────────────────────
+
+    /// <summary>把内容延伸到标题栏，并将顶部条设为可拖动区域（按钮仍可点击），获得一体化观感。</summary>
+    private void SetupAppTitleBar()
+    {
+        if (_titleBarReady)
+        {
+            return;
+        }
+        _titleBarReady = true;
+        try
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            if (hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+            var appWindow = AppWindow.GetFromWindowId(windowId);
+            if (appWindow is null)
+            {
+                return;
+            }
+            appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+            SetTitleBar(TitleBarHost);
+        }
+        catch
+        {
+            // 定制失败时回退到系统默认标题栏，不影响功能
+        }
+    }
+
+    // ── 启动日志 ──────────────────────────────────────────
+
+    /// <summary>新一次启动前清空日志并显示日志框。</summary>
+    private void BeginStartupLog()
+    {
+        _startupLog.Clear();
+        StartupLogText.Text = string.Empty;
+        StartupLogBorder.Visibility = Visibility.Visible;
+    }
+
+    private void ClearStartupLog()
+    {
+        _startupLog.Clear();
+        StartupLogText.Text = string.Empty;
+        StartupLogBorder.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>把一行服务输出追加到黑底日志框，自动滚到底部，保留最近 <see cref="MaxStartupLogLines"/> 行。</summary>
+    private void AppendStartupLog(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            return;
+        }
+        _startupLog.Add(line);
+        if (_startupLog.Count > MaxStartupLogLines)
+        {
+            _startupLog.RemoveRange(0, _startupLog.Count - MaxStartupLogLines);
+        }
+        StartupLogText.Text = string.Join("\n", _startupLog);
+        if (StartupLogBorder.Visibility != Visibility.Visible)
+        {
+            StartupLogBorder.Visibility = Visibility.Visible;
+        }
+        if (StartupLogScroller.ExtentHeight > 0)
+        {
+            StartupLogScroller.ChangeView(null, StartupLogScroller.ExtentHeight, null);
+        }
+    }
+
+    private void ClearLogButton_Click(object sender, RoutedEventArgs e)
+    {
+        ClearStartupLog();
     }
 
     // ── UI 辅助 ─────────────────────────────────────────────

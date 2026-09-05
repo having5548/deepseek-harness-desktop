@@ -5,6 +5,32 @@
 
 ---
 
+## [0.6.0] — 2026-09-05
+
+### 🇬🇧 English
+
+✨ **What's New**
+- **Unified title bar** — window content now extends into the title bar; navigation & app actions live in a single modern top bar that you can drag anywhere while the buttons stay clickable.
+- **Startup log console** — a black, terminal-style panel under the launch banner streams the dsh/Node service logs live while starting, so the moment something goes wrong you can see exactly why.
+- **Clearer startup failures** — if the service exits right after launch, the app now shows an error screen with the exit code and keeps the log visible, instead of silently flipping the status text.
+
+🐛 **Fixes & Improvements**
+- Startup-state feedback improved: no more "starting…" that quietly turns into "service exited" without explanation.
+- Version bumped to **0.6.0**.
+
+### 🇨🇳 中文
+
+✨ **新功能**
+- **一体化标题栏** —— 内容延伸到标题栏，导航与应用操作合并为一条现代顶栏；整条可拖动，按钮仍可正常点击。
+- **启动日志控制台** —— 启动横幅下方新增黑底终端风格日志面板，实时显示 dsh/Node 服务启动输出，一有异常立刻可见原因。
+- **启动失败提示更清晰** —— 服务启动后随即退出时，立即展示带退出码的错误界面并保留日志，不再只是悄悄改变右上角状态文字。
+
+🐛 **修复与改进**
+- 优化启动状态反馈：不再出现「正在启动…」却无声变成「服务已退出」的情况。
+- 版本号升至 **0.6.0**。
+
+---
+
 ## [0.5.0] — 2026-08-22
 
 ### 🇬🇧 English

@@ -8,19 +8,29 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="42" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 顶部工具栏 -->
-        <Border Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="10,6">
+        <!-- ══ 一体化标题栏（含工具栏按钮；整条可作为拖动区域）══ -->
+        <Border x:Name="TitleBarHost" Grid.Row="0"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <!-- 预留系统标题栏按钮（最小化/最大化/关闭）区域 -->
+                    <ColumnDefinition Width="140" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Left">
+
+                <!-- 左侧：应用名 + 导航 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
+                            VerticalAlignment="Center" Padding="12,0,0,0">
+                    <TextBlock Text="DeepSeek Harness" FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,10,0" Opacity="0.92" />
                     <Button x:Name="BackButton" Click="BackButton_Click" ToolTipService.ToolTip="后退" Padding="8,4">
                         <FontIcon Glyph="&#xE72B;" FontSize="14" />
                     </Button>
@@ -34,7 +44,10 @@
                         <FontIcon Glyph="&#xE8A7;" FontSize="14" />
                     </Button>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+
+                <!-- 右侧：服务状态 + 操作按钮 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                            VerticalAlignment="Center">
                     <TextBlock x:Name="ServiceStateText" Text="服务未运行" FontSize="12" Opacity="0.7"
                                VerticalAlignment="Center" Margin="0,0,8,0" />
                     <Button x:Name="CheckUpdateButton" Click="CheckUpdateButton_Click" ToolTipService.ToolTip="检查更新" Padding="8,4">
@@ -50,15 +63,57 @@
             </Grid>
         </Border>
 
-        <!-- 内容区：WebView2 + 状态覆盖层 -->
+        <!-- ══ 内容区：WebView2 + 状态覆盖层 ══ -->
         <Grid Grid.Row="1">
             <WebView2 x:Name="WebView" />
             <Grid x:Name="StatusOverlay" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Visibility="Collapsed">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
-                    <ProgressRing x:Name="StatusRing" IsActive="True" Width="40" Height="40" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="StatusText" Text="正在初始化…" TextAlignment="Center" TextWrapping="Wrap" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock x:Name="StatusDetail" FontSize="12" Opacity="0.7" TextAlignment="Center" TextWrapping="Wrap" />
-                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14"
+                                MaxWidth="760" Padding="24,20">
+                        <ProgressRing x:Name="StatusRing" IsActive="True" Width="44" Height="44"
+                                      HorizontalAlignment="Center" />
+                        <TextBlock x:Name="StatusText" Text="正在初始化…" TextAlignment="Center"
+                                   TextWrapping="Wrap" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="StatusDetail" FontSize="12" Opacity="0.7"
+                                   TextAlignment="Center" TextWrapping="Wrap" />
+
+                        <!-- 黑底启动日志框 -->
+                        <Border x:Name="StartupLogBorder"
+                                Background="#0B0E14" CornerRadius="8"
+                                BorderBrush="#2A313A" BorderThickness="1"
+                                Padding="0" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Background="#11161D" Padding="10,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="服务启动日志" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#8B949E" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" x:Name="ClearLogButton" Content="清空"
+                                            Click="ClearLogButton_Click" Padding="10,2" FontSize="11" />
+                                </Grid>
+                                <ScrollViewer x:Name="StartupLogScroller" Grid.Row="1"
+                                              MaxHeight="240"
+                                              HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollBarVisibility="Auto"
+                                              Padding="10,6">
+                                    <TextBlock x:Name="StartupLogText"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               Foreground="#E6EDF3"
+                                               IsTextSelectionEnabled="True"
+                                               TextWrapping="Wrap"
+                                               Text="等待服务输出…" />
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
         </Grid>
     </Grid>
