@@ -19,7 +19,10 @@ public sealed record CrashInfo(IReadOnlyList<string> PluginNames, string ErrorLo
 /// </summary>
 public sealed class DshHostProcess : IDisposable
 {
-    private static readonly Regex UrlPattern = new(@"dsh web: (http://127\.0\.0\.1:\d+)", RegexOptions.Compiled);
+    // dsh 0.1.2+ 的 web URL 携带鉴权 token，例如
+    //   dsh web: http://127.0.0.1:56137/?token=xxxx
+    // 必须捕获完整 URL（含 query），否则 WebView 打开无 token 的地址会被拒绝访问。
+    private static readonly Regex UrlPattern = new(@"dsh web: (http://127\.0\.0\.1:\d+\S*)", RegexOptions.Compiled);
     private static readonly Regex PluginListPattern = new(@"plugin\(s\) failed to load:\s*(.+?)(?:;|$)", RegexOptions.Compiled);
     private static readonly Regex PluginEntryPattern = new(@"failed to apply loader entry\s+\S+\s+\(([^)]+)\)", RegexOptions.Compiled);
 

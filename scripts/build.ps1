@@ -52,8 +52,8 @@ if (-not (Test-Path $icon)) {
     & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\generate-icon.ps1")
 }
 
-# 2. Prepare bundled runtime (node + dsh) for out-of-box experience
-Write-Host "[2/4] Preparing bundled runtime (node + @deepseek-ai/dsh)..."
+# 2. Prepare bundled runtime (node + npm + pnpm) for out-of-box auto-install of dsh
+Write-Host "[2/4] Preparing bundled runtime (node + npm + pnpm)..."
 & $cmd /c (Join-Path $root "scripts\prepare-runtime.cmd")
 if ($LASTEXITCODE -ne 0) { throw "prepare-runtime failed (exit $LASTEXITCODE)" }
 

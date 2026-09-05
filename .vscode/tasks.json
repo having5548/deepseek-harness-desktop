@@ -11,6 +11,61 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "npmview-dsh",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm view @deepseek-ai/dsh version"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "build-release",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"${workspaceFolder}\\scripts\\build-all.cmd"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "compile",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"dotnet build \"${workspaceFolder}\\DshDesktop\\DshDesktop.csproj\" -c Release -r win-x64 --self-contained false -p:WindowsAppSDKSelfContained=false"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "clean-artifacts",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"if exist \"${workspaceFolder}\\artifacts\" rd /s /q \"${workspaceFolder}\\artifacts\" && echo ARTIFACTS_DELETED || echo ARTIFACTS_MISSING"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "verify",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"${workspaceFolder}\\scripts\\verify-artifacts.cmd"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

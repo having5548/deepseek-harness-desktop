@@ -1,13 +1,14 @@
 @echo off
-rem 验证发布目录中的捆绑运行时可用，并检查安装器时间戳
+rem 验证发布目录中的捆绑运行时可用（node+npm），并检查安装器时间戳
+rem 注意：dsh 不再捆绑进 runtime，由应用首次启动自动安装
 setlocal
 rem 从脚本位置推导仓库根目录（scripts\ 的上一级），支持任意工作区路径
 set "ROOT=%~dp0.."
 set "RT=%ROOT%\artifacts\win-x64\runtime"
 echo === node version ===
 "%RT%\node.exe" --version
-echo === dsh version ===
-"%RT%\node.exe" "%RT%\node_modules\@deepseek-ai\dsh\lib\bin.js" --version
+echo === bundled npm ===
+if exist "%RT%\node_modules\npm\bin\npm-cli.js" (echo npm OK) else (echo npm MISSING)
 echo === setup exe (time) ===
 dir "%ROOT%\artifacts\DshDesktop-Setup-*.exe"
 echo === main exe (time) ===

@@ -24,33 +24,39 @@ public static class DshLocator
     private static readonly Regex NodeInvocationPattern =
         new(@"(?i)(node(?:\.exe)?)\s+""?([^""\r\n\s]+\.js)""?", RegexOptions.Compiled);
 
-    /// <summary>优先使用应用自带捆绑运行时（runtime/node.exe + runtime/node_modules/@deepseek-ai/dsh）。</summary>
-    private static DshRuntime? ResolveBundled()
+    /// <summary>
+    /// 定位自动安装目录中已安装的 dsh（安装根/DeepSeek Harness/node_modules/@deepseek-ai/dsh），
+    /// 用捆绑 node（或系统 node 兜底）运行其 bin.js。
+    /// </summary>
+    private static DshRuntime? ResolveManaged()
     {
         try
         {
-            var baseDir = AppContext.BaseDirectory;
-            var node = Path.Combine(baseDir, "runtime", "node.exe");
-            var script = Path.Combine(baseDir, "runtime", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
-            if (File.Exists(node) && File.Exists(script))
+            if (DshPaths.IsDshInstalled)
             {
-                return new DshRuntime(node, script);
+                var node = File.Exists(DshPaths.BundledNode)
+                    ? DshPaths.BundledNode
+                    : FindNode();
+                if (!string.IsNullOrEmpty(node))
+                {
+                    return new DshRuntime(node, DshPaths.DshBinScript);
+                }
             }
         }
         catch
         {
-            // 捆绑目录异常时回退到其他定位方式
+            // 安装目录异常时回退到其他定位方式
         }
         return null;
     }
 
     public static async Task<DshRuntime?> FindAsync(string? configuredPath)
     {
-        // 0. 应用自带的捆绑运行时（安装目录下 runtime/，打开即用）
-        var bundled = ResolveBundled();
-        if (bundled is not null)
+        // 0. 自动安装目录中已安装的 dsh（DshPaths.IsDshInstalled；无则返回 null）
+        var managed = ResolveManaged();
+        if (managed is not null)
         {
-            return bundled;
+            return managed;
         }
 
         // 1. 用户在设置中指定的路径

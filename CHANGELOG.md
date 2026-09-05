@@ -5,6 +5,42 @@
 
 ---
 
+## [0.7.0] — 2026-09-05
+
+### 🇬🇧 English
+
+✨ **What's New**
+- **No longer bundles dsh** — the installer now ships only the Node.js runtime. On first launch the app automatically downloads and installs the latest `@deepseek-ai/dsh` (auto-selecting the fastest of npm official / npmmirror / Tencent / Huawei mirrors), streams the progress live into the startup log console, and binds the install directory — no more ~110 MB of bundled dsh in every release, and dsh is always up to date.
+- **dsh auto-install on demand** — if dsh is missing at startup, the app installs it automatically; if it already exists it is reused as-is (no unnecessary auto-upgrade network call). A manual "Check for updates" button stays available for upgrading.
+- **Dedicated install location** — dsh is installed into a `DeepSeek Harness` folder on the app's drive (auto-created), isolated from the app itself so it survives app updates/reinstalls.
+- **Authenticated Web UI URL** — the full `dsh web` URL including its `?token=...` is now captured, fixing "dsh web authentication required" that appeared with dsh 0.1.2.
+
+🐛 **Fixes & Improvements**
+- Startup flow unified; clearer messaging when dsh must be installed or a manual path is broken.
+- Settings dialog simplified (removed the now-obsolete "check for updates on startup" switch).
+- Build scripts no longer bundle dsh; stale dsh links/shims are cleaned automatically.
+
+### 🇨🇳 中文
+
+✨ **新功能**
+- **不再捆绑 dsh** —— 安装包只携带 Node.js 运行时。首次启动时应用自动联网安装最新版
+  `@deepseek-ai/dsh`（自动在 npm 官方 / npmmirror / 腾讯云 / 华为云镜像中选最快者），把安装
+  进度实时显示在启动日志控制台里，装完自动绑定安装目录。发布包不再背着约 110MB 的 dsh，
+  而且 dsh 永远是最新版。
+- **按需自动安装 dsh** —— 启动时若本机没有 dsh 就自动安装；已有则直接复用（不再每次联网
+  自动升级）。工具栏仍保留「检查更新」按钮供手动升级。
+- **独立安装目录** —— dsh 自动安装到应用所在盘的 `DeepSeek Harness` 文件夹（自动创建），
+  与应用本体隔离，应用升级/重装也不影响。
+- **带鉴权的 Web URL** —— 现在能完整捕获 dsh web 输出的 URL（含 `?token=...`），修复了
+  dsh 0.1.2 起出现的 "dsh web authentication required"。
+
+🐛 **修复与改进**
+- 统一启动流程：dsh 缺失需自动安装、或手动指定路径失效时给出更清晰提示。
+- 简化设置对话框（移除已失效的「启动时自动检查更新」开关）。
+- 构建脚本不再捆绑 dsh，并自动清理历史残留的 dsh 链接 / shim。
+
+---
+
 ## [0.6.0] — 2026-09-05
 
 ### 🇬🇧 English

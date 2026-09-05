@@ -15,21 +15,13 @@ public sealed class SettingsDialog : ContentDialog
     private readonly MainWindow _owner;
     private readonly TextBox _pathBox = new()
     {
-        PlaceholderText = "留空则自动检测（PATH 或 npm 全局安装）",
-    };
-
-    private readonly CheckBox _checkUpdatesBox = new()
-    {
-        Content = "启动时自动检查 dsh 更新",
+        PlaceholderText = "留空则自动检测（自动安装目录或 PATH）",
     };
 
     /// <summary>用户最终确认的 dsh 路径（可能为空 = 自动检测）。</summary>
     public string DshPath => _pathBox.Text.Trim();
 
-    /// <summary>是否在启动时自动检查 dsh 更新。</summary>
-    public bool CheckForUpdates => _checkUpdatesBox.IsChecked == true;
-
-    public SettingsDialog(string? currentPath, bool checkForUpdates, string? currentVersion, MainWindow owner)
+    public SettingsDialog(string? currentPath, string? currentVersion, MainWindow owner)
     {
         _owner = owner;
         Title = "设置";
@@ -39,7 +31,6 @@ public sealed class SettingsDialog : ContentDialog
 
         _pathBox.Text = currentPath ?? string.Empty;
         _pathBox.Width = 380;
-        _checkUpdatesBox.IsChecked = checkForUpdates;
 
         var browse = new Button { Content = "浏览…" };
         browse.Click += async (_, _) => await BrowseAsync();
@@ -49,7 +40,8 @@ public sealed class SettingsDialog : ContentDialog
 
         var note = new TextBlock
         {
-            Text = "dsh 是 DeepSeek Harness 命令行入口。\n安装方式：npm install -g @deepseek-ai/dsh",
+            Text = "dsh 是 DeepSeek Harness 命令行入口。\n首次启动会自动安装到：" +
+                   DshPaths.InstallRoot + "\n也可以手动指定已存在的 dsh 路径（npm install -g @deepseek-ai/dsh）。",
             FontSize = 12,
             Opacity = 0.7,
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
@@ -57,7 +49,7 @@ public sealed class SettingsDialog : ContentDialog
 
         var versionNote = new TextBlock
         {
-            Text = currentVersion is null ? "当前 dsh 版本：未知" : $"当前 dsh 版本：{currentVersion}",
+            Text = currentVersion is null ? "当前 dsh 版本：未安装" : $"当前 dsh 版本：{currentVersion}",
             FontSize = 12,
             Opacity = 0.7,
         };
@@ -70,7 +62,6 @@ public sealed class SettingsDialog : ContentDialog
         panel.Children.Add(new TextBlock { Text = "dsh 可执行文件路径" });
         panel.Children.Add(_pathBox);
         panel.Children.Add(buttons);
-        panel.Children.Add(_checkUpdatesBox);
         panel.Children.Add(versionNote);
         panel.Children.Add(note);
 

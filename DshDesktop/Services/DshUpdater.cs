@@ -31,11 +31,12 @@ public sealed record DshUpgradeResult(bool Success, bool Cancelled, string Outpu
 public sealed record DshRegistry(string Name, string Url, long LatencyMs, JsonElement DistTags);
 
 /// <summary>
-/// dsh 运行时升级：
+/// dsh 运行时安装 / 升级：
 /// <list type="bullet">
-/// <item>读取本地捆绑 dsh 版本（runtime/node_modules/@deepseek-ai/dsh）；</item>
+/// <item>读取本地 dsh 版本（DshPaths.DshPackageJson，未安装返回 null）；</item>
 /// <item>对多个 npm 源（官方 + 国内镜像）自动 ping，选延迟最低者查询 dist-tags；</item>
-/// <item>用捆绑的 npm 以所选源把 dsh 重装到捆绑运行时，支持进度、取消与超时。</item>
+/// <item>用捆绑的 npm 以所选源把 dsh 安装到安装根目录（DshPaths.InstallRoot），
+///     支持进度、取消与超时；首次启动的自动安装与手动升级共用此逻辑。</item>
 /// </list>
 /// </summary>
 public static class DshUpdater
@@ -62,14 +63,12 @@ public static class DshUpdater
         return client;
     }
 
-    /// <summary>本地捆绑 dsh 的版本号；读取失败返回 null。</summary>
+    /// <summary>本地 dsh 的版本号；读取失败或未安装返回 null。</summary>
     public static string? GetLocalVersion()
     {
         try
         {
-            var pkg = Path.Combine(
-                AppContext.BaseDirectory, "runtime", "node_modules",
-                "@deepseek-ai", "dsh", "package.json");
+            var pkg = DshPaths.DshPackageJson;
             if (!File.Exists(pkg))
             {
                 return null;
@@ -143,7 +142,8 @@ public static class DshUpdater
     }
 
     /// <summary>
-    /// 用捆绑 npm 以指定源把 dsh 升级到指定版本。
+    /// 用捆绑 npm 以指定源把 dsh 安装/升级到安装根目录。<paramref name="version"/> 可传
+    /// <c>latest</c>（首次安装/升级到最新）或具体版本号。
     /// 实时回调 npm 输出行；<paramref name="ct"/> 取消会终止整棵进程树；
     /// 内置 15 分钟超时兜底，避免网络卡死导致无限挂起。
     /// </summary>
@@ -152,15 +152,15 @@ public static class DshUpdater
     {
         try
         {
-            var baseDir = AppContext.BaseDirectory;
-            var node = Path.Combine(baseDir, "runtime", "node.exe");
-            var npmCli = Path.Combine(baseDir, "runtime", "node_modules", "npm", "bin", "npm-cli.js");
-            var runtimeDir = Path.Combine(baseDir, "runtime");
+            var node = DshPaths.BundledNode;
+            var npmCli = DshPaths.BundledNpmCli;
+            var installRoot = DshPaths.InstallRoot;
             if (!File.Exists(node) || !File.Exists(npmCli))
             {
                 return new DshUpgradeResult(false, false,
-                    "运行时缺少 npm（未捆绑），无法自升级。\n可运行 scripts\\prepare-runtime.cmd 重新生成运行时。");
+                    "运行时缺少 node/npm（安装包不完整），无法安装或升级 dsh。");
             }
+            Directory.CreateDirectory(installRoot);
 
             var psi = new ProcessStartInfo
             {
@@ -169,7 +169,7 @@ public static class DshUpdater
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
-                WorkingDirectory = runtimeDir,
+                WorkingDirectory = installRoot,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
@@ -177,7 +177,7 @@ public static class DshUpdater
             psi.ArgumentList.Add("install");
             psi.ArgumentList.Add("-g");
             psi.ArgumentList.Add("--prefix");
-            psi.ArgumentList.Add(runtimeDir);
+            psi.ArgumentList.Add(installRoot);
             psi.ArgumentList.Add("--registry");
             psi.ArgumentList.Add(registryUrl);
             psi.ArgumentList.Add("--omit=dev");

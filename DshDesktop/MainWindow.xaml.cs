@@ -23,7 +23,7 @@ public sealed partial class MainWindow : Window
     private bool _handlingCrash;
     private string? _currentUrl;
     private CancellationTokenSource? _startTimeoutCts;
-    private bool _updatePromptShown;
+    private bool _installingDsh;
     private bool _updatingDsh;
     private bool _titleBarReady;
     private readonly List<string> _startupLog = new();
@@ -62,21 +62,7 @@ public sealed partial class MainWindow : Window
         {
             await WebView.EnsureCoreWebView2Async();
             WireWebView2();
-
-            var runtime = await DshLocator.FindAsync(_settings.DshPath);
-            if (runtime is null)
-            {
-                ShowStatus(
-                    "未检测到 DeepSeek Harness CLI",
-                    "请先安装：npm install -g @deepseek-ai/dsh（或从仓库源码构建）。\n也可以点击右上角设置按钮手动指定 dsh 可执行文件路径。",
-                    isError: true);
-                return;
-            }
-
-            ServiceStateText.Text = "正在启动服务…";
-            ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
-            BeginStartupLog();
-            _host.Start(runtime);
+            await RunStartupAsync();
         }
         catch (Exception ex)
         {
@@ -98,7 +84,7 @@ public sealed partial class MainWindow : Window
 
     private void OnUrlReady(string url)
     {
-        DispatcherQueue.TryEnqueue(async () =>
+        DispatcherQueue.TryEnqueue(() =>
         {
             _startTimeoutCts?.Cancel();
             _currentUrl = url;
@@ -109,7 +95,6 @@ public sealed partial class MainWindow : Window
                 HideStatus();
                 WebView.Source = new Uri(url);
             }
-            await CheckForDshUpdateAsync();
         });
     }
 
@@ -177,7 +162,6 @@ public sealed partial class MainWindow : Window
     {
         var dialog = new SettingsDialog(
             _settings.DshPath,
-            _settings.CheckForUpdatesOnStartup,
             DshUpdater.GetLocalVersion(),
             this);
         dialog.XamlRoot = Content.XamlRoot;
@@ -185,7 +169,6 @@ public sealed partial class MainWindow : Window
         if (result == ContentDialogResult.Primary)
         {
             _settings.DshPath = dialog.DshPath;
-            _settings.CheckForUpdatesOnStartup = dialog.CheckForUpdates;
             _settings.Save();
             await RestartHostAsync();
         }
@@ -205,7 +188,7 @@ public sealed partial class MainWindow : Window
 
     private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
     {
-        await CheckForDshUpdateAsync(manual: true);
+        await CheckForDshUpdateAsync();
     }
 
     // ── 崩溃处理：自动屏蔽报错插件 + 重启 + 弹窗 ───────────
@@ -311,20 +294,40 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ── dsh 自动更新：启动时检测 + 弹窗询问 + 升级 ────────────
+    // ── dsh 安装与更新 ─────────────────────────────────────
 
     /// <summary>
-    /// 检查 dsh 新版本。自动模式（启动时）仅在发现新版时弹窗询问一次；
-    /// 手动模式（工具栏按钮）总是给出明确结果（有新版 → 询问；无新版 → 已是最新；无网络 → 失败提示）。
+    /// 手动检查 dsh 新版本（工具栏按钮）：有新版 → 询问升级；无新版 → 提示已是最新；无网络 → 失败提示。
+    /// 启动时不再自动检查版本（仅在 dsh 缺失时自动安装），见 <see cref="AutoInstallDshIfNeededAsync"/>。
     /// </summary>
-    private async Task CheckForDshUpdateAsync(bool manual = false)
+    private async Task CheckForDshUpdateAsync()
     {
         if (_updatingDsh)
         {
             return;
         }
-        if (!manual && (_updatePromptShown || !_settings.CheckForUpdatesOnStartup))
+
+        // 尚未安装 dsh：手动检查无意义，改为引导自动安装
+        if (DshUpdater.GetLocalVersion() is null)
         {
+            var install = new ContentDialog
+            {
+                Title = "尚未安装 dsh",
+                Content = new TextBlock
+                {
+                    Text = $"检测到本机尚未安装 DeepSeek Harness (dsh)。\n是否立即联网安装最新版到：\n{DshPaths.InstallRoot}",
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 420,
+                },
+                PrimaryButtonText = "立即安装",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot,
+            };
+            if (await install.ShowAsync() == ContentDialogResult.Primary)
+            {
+                await RestartHostAsync(); // 内部：找不到 dsh → 自动安装
+            }
             return;
         }
 
@@ -335,34 +338,23 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            if (manual)
-            {
-                await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源，请检查网络后重试。");
-            }
+            await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源，请检查网络后重试。");
             return;
         }
 
         // 所有源均不可达（未选到任何 registry）
         if (info.RegistryName is null)
         {
-            if (manual)
-            {
-                await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源（官方与国内镜像均不可达），请检查网络后重试。");
-            }
+            await ShowMessageDialogAsync("检查更新失败", "无法连接任何 npm 源（官方与国内镜像均不可达），请检查网络后重试。");
             return;
         }
 
         if (!info.IsUpdateAvailable)
         {
-            if (manual)
-            {
-                var src = info.LatencyMs is { } ms ? $"（{info.RegistryName}，{ms}ms）" : $"（{info.RegistryName}）";
-                await ShowMessageDialogAsync("已是最新版本", $"当前 dsh 版本：{info.LocalVersion}\n更新源：{src}");
-            }
+            var src = info.LatencyMs is { } ms ? $"（{info.RegistryName}，{ms}ms）" : $"（{info.RegistryName}）";
+            await ShowMessageDialogAsync("已是最新版本", $"当前 dsh 版本：{info.LocalVersion}\n更新源：{src}");
             return;
         }
-
-        _updatePromptShown = true; // 本次会话不再重复自动询问
 
         var result = await ShowUpdateDialogAsync(info);
         if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(info.LatestVersion))
@@ -525,6 +517,155 @@ public sealed partial class MainWindow : Window
 
     // ── 生命周期 ────────────────────────────────────────────
 
+    /// <summary>
+    /// 统一的启动入口：定位 dsh（必要时自动联网安装最新版），然后启动服务。
+    /// 首次运行 / dsh 缺失时自动安装，安装过程实时写入启动日志，成功后即可被
+    /// <see cref="DshLocator"/> 自动定位（即"自动绑定安装目录"）；失败则阻止启动并提示重试。
+    /// </summary>
+    private async Task RunStartupAsync()
+    {
+        if (_installingDsh)
+        {
+            return;
+        }
+        try
+        {
+            var runtime = await DshLocator.FindAsync(_settings.DshPath);
+            if (runtime is null)
+            {
+                // 用户手动指定了路径但找不到 → 直接报错，不自动覆盖用户意图
+                if (!string.IsNullOrWhiteSpace(_settings.DshPath))
+                {
+                    ShowStatus(
+                        "未检测到 DeepSeek Harness CLI",
+                        $"设置中指定的 dsh 路径不可用：{_settings.DshPath}\n请点击右上角设置修正路径，或清空后使用自动安装。",
+                        isError: true);
+                    return;
+                }
+
+                // 未指定路径且本机没有 dsh → 自动联网安装最新版
+                if (!await AutoInstallDshIfNeededAsync())
+                {
+                    return; // 失败提示已在安装方法中给出，等待用户重试
+                }
+                runtime = await DshLocator.FindAsync(_settings.DshPath);
+                if (runtime is null)
+                {
+                    ShowStatus(
+                        "自动安装失败",
+                        "dsh 已安装但无法定位，请点击工具栏「重新加载」重试，或检查安装目录权限。",
+                        isError: true);
+                    return;
+                }
+            }
+
+            ServiceStateText.Text = "正在启动服务…";
+            ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
+            BeginStartupLog();
+            _host.Start(runtime);
+            ArmStartTimeout();
+        }
+        catch (Exception ex)
+        {
+            ServiceStateText.Text = "服务启动失败";
+            ShowStatus("服务启动失败", ex.Message, isError: true);
+        }
+    }
+
+    /// <summary>
+    /// 尝试自动安装 dsh（仅当未安装时）：选最快 npm 源 → 安装 <c>latest</c> 到
+    /// <see cref="DshPaths.InstallRoot"/>，实时把 npm 输出写入黑底启动日志。
+    /// 返回是否已成功安装（未安装或失败返回 false）。
+    /// </summary>
+    private async Task<bool> AutoInstallDshIfNeededAsync()
+    {
+        if (_installingDsh)
+        {
+            return false;
+        }
+        _installingDsh = true;
+        try
+        {
+            if (!DshPaths.IsBundledRuntimeComplete)
+            {
+                ShowStatus(
+                    "自动安装不可用",
+                    "安装包缺少捆绑的 Node/npm 运行时，无法自动安装 dsh。\n请重新安装本应用，或在设置中手动指定 dsh 路径。",
+                    isError: true);
+                return false;
+            }
+
+            ServiceStateText.Text = "正在安装 dsh…";
+            ShowStatus(
+                "首次使用：正在自动安装 DeepSeek Harness (dsh)…",
+                $"安装目录：{DshPaths.InstallRoot}\n联网下载可能需要几分钟，进度见下方日志。");
+            BeginStartupLog();
+            AppendStartupLog($"[dsh] 未检测到 dsh，开始自动安装到 {DshPaths.InstallRoot}");
+            AppendStartupLog("[dsh] 正在探测最快的 npm 源（官方 + 国内镜像）…");
+
+            DshRegistry? registry;
+            try
+            {
+                registry = await DshUpdater.SelectBestRegistryAsync();
+            }
+            catch
+            {
+                registry = null;
+            }
+            if (registry is null)
+            {
+                ShowStatus(
+                    "自动安装失败",
+                    "无法连接任何 npm 源（官方与国内镜像均不可达）。\n请检查网络后点击工具栏「重新加载」重试，或在设置中手动指定 dsh。",
+                    isError: true);
+                return false;
+            }
+            AppendStartupLog($"[dsh] 已选择更新源：{registry.Name}（{registry.LatencyMs}ms）");
+            AppendStartupLog("[dsh] 开始安装 @deepseek-ai/dsh@latest …");
+
+            using var cts = new CancellationTokenSource();
+            var progress = new Progress<string>(line =>
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    DispatcherQueue.TryEnqueue(() => AppendStartupLog(line));
+                }
+            });
+
+            var result = await DshUpdater.UpgradeAsync("latest", registry.Url, progress, cts.Token);
+
+            if (result.Cancelled)
+            {
+                ShowStatus(
+                    "自动安装已取消",
+                    "可在网络就绪后点击工具栏「重新加载」重试。",
+                    isError: true);
+                return false;
+            }
+            if (!result.Success)
+            {
+                AppendStartupLog(string.IsNullOrWhiteSpace(result.Output) ? "[dsh] 安装失败" : result.Output);
+                ShowStatus(
+                    "自动安装失败",
+                    "npm 安装未成功，详情见下方日志。\n可点击工具栏「重新加载」重试，或在设置中手动指定 dsh 路径。",
+                    isError: true);
+                return false;
+            }
+
+            AppendStartupLog($"[dsh] 安装完成：{DshUpdater.GetLocalVersion() ?? "已安装"}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("自动安装失败", ex.Message, isError: true);
+            return false;
+        }
+        finally
+        {
+            _installingDsh = false;
+        }
+    }
+
     private async Task RestartHostAsync()
     {
         try
@@ -532,20 +673,7 @@ public sealed partial class MainWindow : Window
             _host.Stop();
             _navigatedToApp = false;
             _currentUrl = null;
-            var runtime = await DshLocator.FindAsync(_settings.DshPath);
-            if (runtime is null)
-            {
-                ShowStatus(
-                    "未检测到 DeepSeek Harness CLI",
-                    "请检查设置中的 dsh 路径是否正确。",
-                    isError: true);
-                return;
-            }
-            ServiceStateText.Text = "正在启动服务…";
-            ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
-            BeginStartupLog();
-            _host.Start(runtime);
-            ArmStartTimeout();
+            await RunStartupAsync();
         }
         catch (Exception ex)
         {
