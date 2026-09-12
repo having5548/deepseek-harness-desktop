@@ -18,10 +18,22 @@ New-Item -ItemType Directory -Force -Path $rt | Out-Null
 Set-Content -Path $logFile -Value "prepare-runtime start" -Encoding utf8
 
 # 1. 安装 pnpm 到捆绑运行时（供 dsh plugin 在运行时使用）
-Log "npm install pnpm -> runtime ..."
-& cmd /c "npm install -g --prefix `"$rt`" --no-audit --no-fund pnpm" 2>&1 | Out-Null
+#    固定 pnpm 11.x：pnpm 12+ 自带 "pn" 运行时，会在包内塞入 8 份各约 42MB 的重复二进制
+#    （pn / pn.exe / pnpm / pnpm.exe / pnpx / pnpx.exe / pnx / pnx.exe），
+#    使捆绑运行时从约 19MB 膨胀到约 398MB、安装包凭空多出约 105MB。
+#    11.x 仅约 19MB，且为 dsh plugin 实测可用的版本。
+#    先清掉旧版本残留（含其 bin shim），避免降级后留下孤儿文件。
+$pnpmDir = Join-Path $rt "node_modules\pnpm"
+if (Test-Path $pnpmDir) { Remove-Item $pnpmDir -Recurse -Force; Log "removed existing pnpm (clean install)" }
+foreach ($shim in @("pn","pn.cmd","pn.ps1","pnx","pnx.cmd","pnx.ps1","pnpx","pnpx.cmd","pnpx.ps1")) {
+    $p = Join-Path $rt $shim
+    if (Test-Path $p) { Remove-Item $p -Force }
+}
+Log "npm install pnpm@11 -> runtime ..."
+& cmd /c "npm install -g --prefix `"$rt`" --no-audit --no-fund pnpm@11" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { Log "npm install pnpm FAILED ($LASTEXITCODE)"; exit 1 }
-Log "pnpm install OK"
+$pnpmV = (& cmd /c "`"$rt\pnpm.cmd`" --version" 2>&1 | Select-Object -First 1)
+Log "pnpm install OK (version $pnpmV)"
 
 # 2. 拷贝 Node 运行时 + VC++ 运行库（使 node 可独立运行）
 if (-not (Test-Path (Join-Path $rt "node.exe"))) {

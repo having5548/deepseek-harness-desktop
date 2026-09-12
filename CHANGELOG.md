@@ -18,6 +18,7 @@
 - **Fixed the Huawei Cloud npm mirror URL** — `registry.huaweicloud.com` does not resolve; the correct host is `repo.huaweicloud.com`. One of the four mirrors was therefore always unreachable.
 - **The crash-recovery path can no longer crash the app**: exceptions raised while auto-disabling a failing plugin are now caught and written to the startup log.
 - **New setting: "Refresh plugin tree after upgrading dsh" (on by default).** dsh's plugin tree lives in `~/.dsh/profiles/web` and is managed by its own pnpm lockfile; upgrading the CLI never re-resolves it, so a third-party plugin could keep depending on an older `@deepseek-ai/dsh-*`. When enabled, the app runs `pnpm update` in the profile directory after a successful upgrade (and reports the result).
+- **Installer size back to ~84 MB (build fix).** The bundled pnpm is now pinned to 11.x. pnpm 12+ ships its own `pn` runtime as nine duplicate ~42 MB binaries (`pn`, `pn.exe`, `pnpm`, `pnpm.exe`, `pnpx`, `pnpx.exe`, `pnx`, `pnx.exe`, plus `@pnpm`), inflating the bundled runtime from ~19 MB to ~398 MB. The build also now wipes the publish directory before publishing and mirrors the runtime with `robocopy /MIR`, so leftovers from a previous build can no longer be packaged.
 
 ### 🇨🇳 中文
 
@@ -39,6 +40,10 @@
 - **新增设置项「升级 dsh 后刷新插件树」（默认开启）。** dsh 的插件树位于 `~/.dsh/profiles/web`，
   由它自己的 pnpm 锁文件管理；升级 CLI 并不会重解析它，因此第三方插件可能仍依赖较旧的
   `@deepseek-ai/dsh-*`。开启后，升级成功会在该 profile 目录执行一次 `pnpm update` 并反馈结果。
+- **安装包体积回到约 84MB（构建修复）。** 捆绑的 pnpm 固定为 11.x。pnpm 12+ 自带 "pn" 运行时，
+  会以 9 份各约 42MB 的重复二进制形式塞进包里（`pn`/`pn.exe`/`pnpm`/`pnpm.exe`/`pnpx`/`pnpx.exe`/
+  `pnx`/`pnx.exe` 及 `@pnpm`），使捆绑运行时从约 19MB 膨胀到约 398MB。同时构建脚本现在会在
+  publish 前清空产物目录、并用 `robocopy /MIR` 镜像运行时，杜绝上次构建的残留被打进安装包。
 
 ---
 

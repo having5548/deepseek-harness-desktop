@@ -16,11 +16,16 @@ call "%ROOT%\scripts\prepare-runtime.cmd"
 if errorlevel 1 (echo PREPARE_FAILED & exit /b 1)
 
 echo ===[2/3] dotnet publish===
+rem 先清空上次 publish 的残留：dotnet publish 与 robocopy /E 都只增不删，
+rem 上一次构建留下的旧版本文件（例如旧版 pnpm 的大二进制）会被一并打进安装包，
+rem 让安装包凭空变大。这里强制从干净目录开始构建。
+if exist "%PUBDIR%" rd /s /q "%PUBDIR%"
 "%DOTNET%" publish "%CSPROJ%" -c Release -r win-x64 --self-contained true -p:PublishDir="%PUBDIR%"
 if errorlevel 1 (echo PUBLISH_FAILED & exit /b 1)
 
 echo ===[2b/3] copy bundled runtime into publish dir===
-robocopy "%ROOT%\DshDesktop\runtime" "%PUBDIR%\runtime" /E /NFL /NDL /NJH /NJS /NP
+rem /MIR = 镜像（等价 /E + /PURGE），目标中多余文件会被删除，避免旧运行时残留被一并打包
+robocopy "%ROOT%\DshDesktop\runtime" "%PUBDIR%\runtime" /MIR /NFL /NDL /NJH /NJS /NP
 if errorlevel 8 (echo ROBOCOPY_FAILED & exit /b 1)
 
 echo ===[3/3] Inno Setup===

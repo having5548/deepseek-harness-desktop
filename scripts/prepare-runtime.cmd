@@ -33,8 +33,17 @@ for %%f in ("%RT%\dsh" "%RT%\dsh.cmd" "%RT%\dsh.ps1") do (
 
 rem 2. 安装 pnpm 到捆绑运行时（供 dsh plugin 在运行时使用）
 if not exist "%RT%" mkdir "%RT%"
+rem    固定 pnpm 11.x：pnpm 12+ 自带 "pn" 运行时，会在包内塞入 8 份各约 42MB 的重复二进制
+rem    （pn / pn.exe / pnpm / pnpm.exe / pnpx / pnpx.exe / pnx / pnx.exe），
+rem    使捆绑运行时从约 19MB 膨胀到约 398MB、安装包凭空多出约 105MB。
+rem    11.x 仅约 19MB，且为 dsh plugin 实测可用的版本。
+rem    先清掉可能存在的旧版本残留（含其 bin shim），避免降级后留下孤儿文件。
+if exist "%RT%\node_modules\pnpm" rd /s /q "%RT%\node_modules\pnpm"
+for %%f in ("%RT%\pn" "%RT%\pn.cmd" "%RT%\pn.ps1" "%RT%\pnx" "%RT%\pnx.cmd" "%RT%\pnx.ps1" "%RT%\pnpx" "%RT%\pnpx.cmd" "%RT%\pnpx.ps1") do (
+  if exist %%f del /q %%f
+)
 cd /d "%RT%"
-call npm install -g --prefix "%RT%" --no-audit --no-fund pnpm
+call npm install -g --prefix "%RT%" --no-audit --no-fund pnpm@11
 if errorlevel 1 (
   echo PNPM_INSTALL_FAILED
   cd /d "%CUR%"

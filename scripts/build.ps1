@@ -59,6 +59,9 @@ if ($LASTEXITCODE -ne 0) { throw "prepare-runtime failed (exit $LASTEXITCODE)" }
 
 # 3. Self-contained publish (target machine needs no .NET / Windows App SDK runtime)
 Write-Host "[3/4] dotnet publish ($Configuration / $Runtime, self-contained)..."
+# Clear the previous publish output first: dotnet publish and robocopy /E only add/overwrite,
+# so stale files from an earlier build (e.g. an older pnpm runtime) would be shipped as well.
+if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 & $dotnet publish $csproj -c $Configuration -r $Runtime --self-contained true -p:PublishDir=$publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
 
@@ -66,7 +69,8 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
 Write-Host "[3b/4] Copying bundled runtime into publish dir..."
 $srcRuntime = Join-Path $root "DshDesktop\runtime"
 $dstRuntime = Join-Path $publishDir "runtime"
-& $cmd /c "robocopy `"$srcRuntime`" `"$dstRuntime`" /E /NFL /NDL /NJH /NJS /NP >nul"
+# /MIR = mirror (= /E + /PURGE): removes extra files in the destination so stale runtime leftovers are not packaged
+& $cmd /c "robocopy `"$srcRuntime`" `"$dstRuntime`" /MIR /NFL /NDL /NJH /NJS /NP >nul"
 if ($LASTEXITCODE -gt 7) { throw "robocopy failed (exit $LASTEXITCODE)" }
 
 # 4. Inno Setup compile installer

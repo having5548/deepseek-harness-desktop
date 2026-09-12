@@ -10,11 +10,15 @@ call :find_tool dotnet DOTNET || exit /b 1
 call :find_tool iscc ISCC || exit /b 1
 
 echo ===[1/3] dotnet publish===
+rem 先清空上次 publish 的残留：dotnet publish 与 robocopy /E 都只增不删，
+rem 上一次构建留下的旧版本文件（例如旧版 pnpm 的大二进制）会被一并打进安装包。
+if exist "%PUB%" rd /s /q "%PUB%"
 "%DOTNET%" publish "%ROOT%\DshDesktop\DshDesktop.csproj" -c Release -r win-x64 --self-contained true -p:PublishDir="%PUB%"
 if errorlevel 1 (echo PUBLISH_FAILED & exit /b 1)
 
 echo ===[2/3] copy bundled runtime===
-robocopy "%ROOT%\DshDesktop\runtime" "%PUB%\runtime" /E /NFL /NDL /NJH /NJS /NP
+rem /MIR = 镜像（等价 /E + /PURGE），删除目标中多余文件，避免旧运行时残留被一并打包
+robocopy "%ROOT%\DshDesktop\runtime" "%PUB%\runtime" /MIR /NFL /NDL /NJH /NJS /NP
 if errorlevel 8 (echo ROBOCOPY_FAILED & exit /b 1)
 
 echo ===[3/3] Inno Setup===
