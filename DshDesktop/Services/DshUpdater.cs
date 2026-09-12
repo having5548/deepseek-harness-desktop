@@ -41,7 +41,6 @@ public sealed record DshRegistry(string Name, string Url, long LatencyMs, JsonEl
 /// </summary>
 public static class DshUpdater
 {
-    private const string PackageName = "@deepseek-ai/dsh";
     private const string DistTagsPath = "-/package/@deepseek-ai/dsh/dist-tags";
 
     /// <summary>候选 npm 源（官方 + 国内镜像，规避网络不可达/被墙）。</summary>
@@ -50,7 +49,8 @@ public static class DshUpdater
         ("npm 官方", "https://registry.npmjs.org/"),
         ("npmmirror", "https://registry.npmmirror.com/"),
         ("腾讯云镜像", "https://mirrors.cloud.tencent.com/npm/"),
-        ("华为云镜像", "https://registry.huaweicloud.com/repository/npm/"),
+        // 注意：华为云 npm 镜像是 repo.huaweicloud.com，写成 registry.huaweicloud.com 无法解析
+        ("华为云镜像", "https://repo.huaweicloud.com/repository/npm/"),
     };
 
     private static readonly HttpClient Http = CreateHttpClient();
@@ -126,154 +126,24 @@ public static class DshUpdater
     {
         var local = GetLocalVersion() ?? "0.0.0";
         var registry = await SelectBestRegistryAsync(ct);
-        string? remote = null;
-        if (registry is not null)
-        {
-            foreach (var tag in new[] { "latest", "next" })
-            {
-                if (registry.DistTags.TryGetProperty(tag, out var node)
-                    && node.ValueKind == JsonValueKind.String)
-                {
-                    remote = PickNewer(remote, node.GetString());
-                }
-            }
-        }
+        // 解析出"确切版本号"（latest 与 next 中较新者）。用户看到的目标版本必须与最终交给
+        // npm 安装的版本号完全一致 —— 绝不能把 latest/next 这类标签直接用于安装，否则会出现
+        // "CLI 停在旧版、插件包却升到新版"的版本偏斜。
+        var remote = registry is null ? null : DshInstaller.ResolveVersion(registry);
         return new DshUpdateInfo(local, remote, registry?.Name, registry?.Url, registry?.LatencyMs);
     }
 
     /// <summary>
-    /// 用捆绑 npm 以指定源把 dsh 安装/升级到安装根目录。<paramref name="version"/> 可传
-    /// <c>latest</c>（首次安装/升级到最新）或具体版本号。
-    /// 实时回调 npm 输出行；<paramref name="ct"/> 取消会终止整棵进程树；
-    /// 内置 15 分钟超时兜底，避免网络卡死导致无限挂起。
+    /// 安装 / 升级 dsh。<paramref name="version"/> 必须是<b>确切版本号</b>（如 <c>0.1.5-rc.2</c>），
+    /// 不接受 <c>latest</c> / <c>next</c> 标签 —— 原因见 <see cref="DshInstaller"/> 的类说明。
+    /// 实际安装由 <see cref="DshInstaller.InstallAsync"/> 以"暂存安装 + 校验 + 整体替换"的方式完成，
+    /// 避免就地更新留下半新半旧的坏安装。
     /// </summary>
-    public static async Task<DshUpgradeResult> UpgradeAsync(
+    public static Task<DshUpgradeResult> UpgradeAsync(
         string version, string registryUrl, IProgress<string>? progress, CancellationToken ct)
-    {
-        try
-        {
-            var node = DshPaths.BundledNode;
-            var npmCli = DshPaths.BundledNpmCli;
-            var installRoot = DshPaths.InstallRoot;
-            if (!File.Exists(node) || !File.Exists(npmCli))
-            {
-                return new DshUpgradeResult(false, false,
-                    "运行时缺少 node/npm（安装包不完整），无法安装或升级 dsh。");
-            }
-            Directory.CreateDirectory(installRoot);
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = node,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = installRoot,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            };
-            psi.ArgumentList.Add(npmCli);
-            psi.ArgumentList.Add("install");
-            psi.ArgumentList.Add("-g");
-            psi.ArgumentList.Add("--prefix");
-            psi.ArgumentList.Add(installRoot);
-            psi.ArgumentList.Add("--registry");
-            psi.ArgumentList.Add(registryUrl);
-            psi.ArgumentList.Add("--omit=dev");
-            psi.ArgumentList.Add("--no-audit");
-            psi.ArgumentList.Add("--no-fund");
-            psi.ArgumentList.Add("--allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs");
-            psi.ArgumentList.Add($"{PackageName}@{version}");
-
-            // 15 分钟超时兜底：网络卡死时自动终止，避免无限挂起
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromMinutes(15));
-            var token = timeoutCts.Token;
-
-            using var proc = Process.Start(psi);
-            if (proc is null)
-            {
-                return new DshUpgradeResult(false, false, "无法启动 npm 升级进程。");
-            }
-
-            var output = new StringBuilder();
-            async Task PumpAsync(StreamReader reader)
-            {
-                try
-                {
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(token)) is not null)
-                    {
-                        lock (output)
-                        {
-                            if (output.Length > 0) output.Append('\n');
-                            output.Append(line);
-                        }
-                        progress?.Report(line);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // 取消/超时：读流被中断，交给下方退出分支统一处理
-                }
-            }
-
-            var pumpOut = PumpAsync(proc.StandardOutput);
-            var pumpErr = PumpAsync(proc.StandardError);
-
-            var cancelled = false;
-            var exitCode = -1;
-            try
-            {
-                exitCode = await Task.Run(() =>
-                {
-                    using var reg = token.Register(() =>
-                    {
-                        cancelled = true;
-                        try { proc.Kill(entireProcessTree: true); } catch { }
-                    });
-                    proc.EnableRaisingEvents = true;
-                    var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    proc.Exited += (_, _) => tcs.TrySetResult(proc.ExitCode);
-                    if (proc.HasExited) tcs.TrySetResult(proc.ExitCode);
-                    return tcs.Task;
-                }, token);
-            }
-            catch (OperationCanceledException)
-            {
-                cancelled = true;
-                exitCode = -1;
-            }
-
-            await Task.WhenAll(pumpOut, pumpErr);
-
-            var text = output.ToString().Trim();
-            if (cancelled)
-            {
-                return new DshUpgradeResult(false, true,
-                    ct.IsCancellationRequested ? "升级已取消。" : "升级超时（15 分钟），已中止。");
-            }
-            return new DshUpgradeResult(exitCode == 0, false, text);
-        }
-        catch (OperationCanceledException)
-        {
-            return new DshUpgradeResult(false, true, "升级已取消。");
-        }
-        catch (Exception ex)
-        {
-            return new DshUpgradeResult(false, false, ex.Message);
-        }
-    }
+        => DshInstaller.InstallAsync(version, registryUrl, progress, ct);
 
     // ── 版本比较（简化 semver：core + prerelease）────────────────
-
-    private static string? PickNewer(string? a, string? b)
-    {
-        if (string.IsNullOrEmpty(a)) return b;
-        if (string.IsNullOrEmpty(b)) return a;
-        return CompareVersions(a, b) >= 0 ? a : b;
-    }
 
     public static int CompareVersions(string a, string b)
     {

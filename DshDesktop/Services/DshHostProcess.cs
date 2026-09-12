@@ -33,6 +33,9 @@ public sealed class DshHostProcess : IDisposable
     private readonly List<string> _errorBuffer = new();
     private Process? _process;
 
+    /// <summary>标记当前退出是 <see cref="Stop"/> 主动终止造成的，此时不应上报 Exited/Crashed。</summary>
+    private volatile bool _stopping;
+
     /// <summary>服务已就绪，参数为可访问的 Web UI URL。</summary>
     public event Action<string>? UrlReady;
 
@@ -116,6 +119,7 @@ public sealed class DshHostProcess : IDisposable
             _errorBuffer.Clear();
         }
 
+        _stopping = false;
         _process = Process.Start(psi);
         if (_process is null)
         {
@@ -177,6 +181,13 @@ public sealed class DshHostProcess : IDisposable
             // Stop() 已终止并释放进程
             return;
         }
+
+        // 主动停止（升级 / 重启）不是异常退出，不要上报，否则界面会闪出"服务已退出"错误
+        if (_stopping)
+        {
+            return;
+        }
+
         Exited?.Invoke(code);
 
         var crash = TryDetectCrash();
@@ -238,6 +249,7 @@ public sealed class DshHostProcess : IDisposable
     {
         var proc = _process;
         _process = null;
+        _stopping = true;
         if (proc is null)
         {
             return;
@@ -258,8 +270,16 @@ public sealed class DshHostProcess : IDisposable
                         "/F",   // 强制终止
                     },
                 });
-                killer?.WaitForExit(3000);
-                proc.WaitForExit(2000);
+                killer?.WaitForExit(5000);
+                // 必须确认进程真的已退出：Windows 上进程退出与文件句柄释放之间有延迟。
+                // 升级 dsh 前若进程仍在，npm 会因文件被占用（EBUSY/EPERM）跳过后继续，
+                // 从而留下"CLI 没换掉、插件包已升级"的半新半旧安装。这里等足够久。
+                proc.WaitForExit(10000);
+                if (!proc.HasExited)
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    proc.WaitForExit(5000);
+                }
             }
         }
         catch
@@ -278,6 +298,12 @@ public sealed class DshHostProcess : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// 在线程池上执行 <see cref="Stop"/>，避免 UI 线程被最长十几秒的等待卡住。
+    /// 升级 / 重启 dsh 前应当 await 本方法，确保进程树完全退出后再动文件。
+    /// </summary>
+    public Task StopAsync() => Task.Run(Stop);
 
     public void Dispose()
     {

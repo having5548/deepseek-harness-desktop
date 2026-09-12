@@ -6,7 +6,7 @@
 
 > DeepSeek Harness in a native Windows window — **install and go, as easy as any normal app**.
 
-![Version](https://img.shields.io/badge/version-0.7.0-2b6cb0)
+![Version](https://img.shields.io/badge/version-0.7.1-2b6cb0)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
 ![Framework](https://img.shields.io/badge/.NET-8.0-512bd4)
 ![Runtime](https://img.shields.io/badge/runtime-Bundled%20Node.js%2C%20dsh%20auto-installed%20on%20first%20launch-4ea04e)
@@ -48,7 +48,7 @@ cleans everything up when you quit — no leftover processes.
 
 ## 📥 Installation
 
-Double-click `artifacts/DshDesktop-Setup-0.7.0.exe` and follow the wizard — no admin rights needed.
+Double-click `artifacts/DshDesktop-Setup-0.7.1.exe` and follow the wizard — no admin rights needed.
 The installer will warn you if the WebView2 Runtime is missing.
 
 > Portable version: `artifacts/win-x64/DshDesktop.exe` — unzip and run.
@@ -122,7 +122,7 @@ scripts\build-all.cmd
 
 Artifacts:
 - `artifacts/win-x64/DshDesktop.exe` — portable, run directly (includes bundled node/npm runtime)
-- `artifacts/DshDesktop-Setup-0.7.0.exe` — installer
+- `artifacts/DshDesktop-Setup-0.7.1.exe` — installer
 
 Just for dev/debug:
 
@@ -187,6 +187,17 @@ scripts\verify-artifacts.cmd
   "Reload" in the toolbar to retry, or specify a dsh path manually in Settings.
 - **"dsh web authentication required"**: upgrade to v0.7.0 (older versions didn't capture dsh 0.1.2's
   auth token). If it persists, an outdated dsh is installed — upgrade it via "Check for updates".
+- **Errors after updating dsh — previously you had to wipe the install dir and reinstall**:
+  fixed in v0.7.1. Older builds installed the npm `latest` tag, but dsh's `latest` can be *older*
+  than `next` while its dependency ranges resolve to a newer prerelease — leaving the CLI and the
+  plugin packages on mismatched versions (version skew). The app now installs the **exact** version
+  and updates via "stage → verify → swap"; it also self-checks at startup and reinstalls automatically
+  if the managed dsh install is found to be inconsistent.
+- **Should the plugin tree be refreshed after upgrading?** dsh's plugin tree lives in
+  `~/.dsh/profiles/web` and is managed by its own pnpm lockfile, so upgrading the CLI does not
+  re-resolve it. If plugin-related errors persist after an upgrade, make sure
+  **"Refresh plugin tree after upgrading dsh"** is enabled in Settings (it is on by default), or run
+  `pnpm update` in that directory manually (equivalent to `dsh plugin --profile web update`).
 - **Plugin install/restore needs internet**: `dsh plugin` installs via pnpm from the npm registry.
 - **A plugin crashed and got auto-blocked**: the app uninstalled the culprit and restarted with a safe
   config. Go to the "Blocked" section of the Plugins dialog and choose "Restore" to retry.

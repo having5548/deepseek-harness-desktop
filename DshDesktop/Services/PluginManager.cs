@@ -471,6 +471,18 @@ public static class PluginManager
     public static Task<PluginCommandResult> RemoveAsync(string packageName)
         => RunPluginCommandAsync("remove", packageName);
 
+    /// <summary>
+    /// 刷新 web profile 的插件树：在 profile 目录执行 <c>pnpm update</c>，按各自的 semver 范围
+    /// 重新解析依赖。
+    ///
+    /// <para>为什么需要：dsh 的插件树由 profile 目录（<c>~/.dsh/profiles/web</c>）下的 pnpm
+    /// 独立管理（自带 pnpm-lock.yaml），而升级 dsh CLI 只更新 CLI 自己的安装目录，
+    /// 不会重解析 profile。插件依赖的 <c>@deepseek-ai/dsh-*</c> 版本因此可能停留在旧版，
+    /// 与新 CLI 不匹配而启动报错。</para>
+    /// </summary>
+    public static Task<PluginCommandResult> RefreshProfileAsync()
+        => RunPluginCommandAsync("update");
+
     /// <summary>屏蔽插件：卸载并从设置中记录，返回是否成功。</summary>
     public static async Task<bool> DisablePluginAsync(AppSettings settings, string packageName)
     {

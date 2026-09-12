@@ -146,7 +146,7 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            RestartHostAsync();
+            _ = RestartHostAsync();
         }
     }
 
@@ -163,12 +163,14 @@ public sealed partial class MainWindow : Window
         var dialog = new SettingsDialog(
             _settings.DshPath,
             DshUpdater.GetLocalVersion(),
+            _settings.RefreshProfileAfterUpdate,
             this);
         dialog.XamlRoot = Content.XamlRoot;
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {
             _settings.DshPath = dialog.DshPath;
+            _settings.RefreshProfileAfterUpdate = dialog.RefreshProfileAfterUpdate;
             _settings.Save();
             await RestartHostAsync();
         }
@@ -220,6 +222,12 @@ public sealed partial class MainWindow : Window
 
                 // 3. 弹窗告知用户（插件名 + 报错日志 + 一键重启/恢复）
                 await ShowCrashDialogAsync(crash, disabled);
+            }
+            catch (Exception ex)
+            {
+                // 这是崩溃恢复路径，自身绝不能再让异常逃逸：async void 中未捕获的异常
+                // 会直接终结进程，等于"恢复逻辑把应用彻底搞崩"。
+                AppendStartupLog("[崩溃处理] 自动屏蔽/重启过程中出错：" + ex.Message);
             }
             finally
             {
@@ -452,8 +460,9 @@ public sealed partial class MainWindow : Window
                 }
             });
 
-            // 停止服务，避免升级过程中占用运行文件
-            _host.Stop();
+            // 停止服务并等待进程树完全退出：npm 替换文件时若 dsh 仍在运行，
+            // 会因文件被占用而跳过，从而留下"CLI 旧、插件新"的坏安装。
+            await _host.StopAsync();
             _navigatedToApp = false;
             _currentUrl = null;
 
@@ -487,8 +496,61 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            // 升级成功后、重启服务前，刷新 profile 的插件树。
+            // dsh 的插件树由 ~/.dsh/profiles/web 下的 pnpm 独立管理（自带 pnpm-lock.yaml），
+            // 升级 CLI 不会重解析它；不刷新就可能出现插件依赖的 @deepseek-ai/* 仍是旧版本，
+            // 与新 CLI 不匹配而启动报错。
+            var profileNote = string.Empty;
+            if (_settings.RefreshProfileAfterUpdate)
+            {
+                var refreshStatus = new TextBlock
+                {
+                    Text = "在 profile 目录执行 pnpm update，可能需要几分钟…",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    Opacity = 0.85,
+                };
+                var refreshPanel = new StackPanel { Spacing = 12, Width = 460 };
+                refreshPanel.Children.Add(new ProgressRing
+                {
+                    IsActive = true,
+                    Width = 32,
+                    Height = 32,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                });
+                refreshPanel.Children.Add(refreshStatus);
+
+                var refreshDialog = new ContentDialog
+                {
+                    Title = "正在刷新插件树…",
+                    Content = refreshPanel,
+                    XamlRoot = Content.XamlRoot,
+                };
+                _ = refreshDialog.ShowAsync();
+
+                var refresh = await PluginManager.RefreshProfileAsync();
+                try
+                {
+                    refreshDialog.Hide();
+                }
+                catch
+                {
+                    // 弹窗可能已被用户关闭
+                }
+
+                if (refresh.Success)
+                {
+                    profileNote = "\n插件树已刷新。";
+                }
+                else
+                {
+                    AppendStartupLog("[插件树] 刷新失败：" + refresh.Output);
+                    profileNote = "\n提示：插件树刷新失败（不影响 dsh 本体），可在「插件」对话框中重试。";
+                }
+            }
+
             await RestartHostAsync();
-            await ShowMessageDialogAsync("升级完成", $"dsh 已成功升级到 {version}。");
+            await ShowMessageDialogAsync("升级完成", $"dsh 已成功升级到 {version}。{profileNote}");
         }
         finally
         {
@@ -530,6 +592,9 @@ public sealed partial class MainWindow : Window
         }
         try
         {
+            // 清掉上次异常退出可能残留的 .staging-* / .backup-* 目录
+            DshInstaller.CleanupLeftovers();
+
             var runtime = await DshLocator.FindAsync(_settings.DshPath);
             if (runtime is null)
             {
@@ -559,6 +624,39 @@ public sealed partial class MainWindow : Window
                 }
             }
 
+            // 自检并自愈：若当前用的是自动安装目录里的 dsh，且体检发现损坏（典型症状就是
+            // "CLI 旧、插件新"的版本偏斜），直接重装成版本一致的安装 —— 免去用户手动
+            // 删光整个目录再重装的麻烦。
+            var fromManagedInstall = runtime is not null
+                && string.Equals(runtime.ScriptPath, DshPaths.DshBinScript, StringComparison.OrdinalIgnoreCase);
+            if (fromManagedInstall && !DshInstaller.IsManagedInstallHealthy(out var health))
+            {
+                AppendStartupLog("[自检] 检测到 dsh 安装异常：" + health);
+                AppendStartupLog("[自检] 正在重新安装以修复…");
+                if (!await AutoInstallDshIfNeededAsync(repair: true))
+                {
+                    return; // 失败提示已在安装方法中给出
+                }
+                runtime = await DshLocator.FindAsync(_settings.DshPath);
+                if (runtime is null)
+                {
+                    ShowStatus(
+                        "修复失败",
+                        "重装后仍无法定位 dsh，请点击工具栏「重新加载」重试，或检查安装目录权限。",
+                        isError: true);
+                    return;
+                }
+            }
+
+            if (runtime is null)
+            {
+                ShowStatus(
+                    "未检测到 DeepSeek Harness CLI",
+                    "无法定位可用的 dsh，请点击工具栏「重新加载」重试，或在设置中手动指定 dsh 路径。",
+                    isError: true);
+                return;
+            }
+
             ServiceStateText.Text = "正在启动服务…";
             ShowStatus("正在启动 DeepSeek Harness 服务…", runtime.DisplayName);
             BeginStartupLog();
@@ -573,34 +671,36 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 尝试自动安装 dsh（仅当未安装时）：选最快 npm 源 → 安装 <c>latest</c> 到
-    /// <see cref="DshPaths.InstallRoot"/>，实时把 npm 输出写入黑底启动日志。
-    /// 返回是否已成功安装（未安装或失败返回 false）。
+    /// 安装 dsh。<paramref name="repair"/> = false 用于首次安装；true 用于<b>重装修复</b>损坏的安装
+    /// （例如版本偏斜导致启动报错），此时无需用户手动删光安装目录。
     /// </summary>
-    private async Task<bool> AutoInstallDshIfNeededAsync()
+    private async Task<bool> AutoInstallDshIfNeededAsync(bool repair = false)
     {
         if (_installingDsh)
         {
             return false;
         }
         _installingDsh = true;
+        var action = repair ? "修复" : "自动安装";
         try
         {
             if (!DshPaths.IsBundledRuntimeComplete)
             {
                 ShowStatus(
-                    "自动安装不可用",
-                    "安装包缺少捆绑的 Node/npm 运行时，无法自动安装 dsh。\n请重新安装本应用，或在设置中手动指定 dsh 路径。",
+                    $"{action}不可用",
+                    "安装包缺少捆绑的 Node/npm 运行时，无法配置 dsh。\n请重新安装本应用，或在设置中手动指定 dsh 路径。",
                     isError: true);
                 return false;
             }
 
-            ServiceStateText.Text = "正在安装 dsh…";
+            ServiceStateText.Text = repair ? "正在修复 dsh…" : "正在安装 dsh…";
             ShowStatus(
-                "首次使用：正在自动安装 DeepSeek Harness (dsh)…",
+                repair
+                    ? "正在重新安装 DeepSeek Harness (dsh) 以修复损坏的安装…"
+                    : "首次使用：正在自动安装 DeepSeek Harness (dsh)…",
                 $"安装目录：{DshPaths.InstallRoot}\n联网下载可能需要几分钟，进度见下方日志。");
             BeginStartupLog();
-            AppendStartupLog($"[dsh] 未检测到 dsh，开始自动安装到 {DshPaths.InstallRoot}");
+            AppendStartupLog($"[dsh] 开始{(repair ? "重新安装（修复）" : "自动安装")}到 {DshPaths.InstallRoot}");
             AppendStartupLog("[dsh] 正在探测最快的 npm 源（官方 + 国内镜像）…");
 
             DshRegistry? registry;
@@ -615,13 +715,26 @@ public sealed partial class MainWindow : Window
             if (registry is null)
             {
                 ShowStatus(
-                    "自动安装失败",
+                    $"{action}失败",
                     "无法连接任何 npm 源（官方与国内镜像均不可达）。\n请检查网络后点击工具栏「重新加载」重试，或在设置中手动指定 dsh。",
                     isError: true);
                 return false;
             }
+
+            // 关键：从 dist-tags 解析出"确切版本号"再安装，绝不能把 latest 标签交给 npm。
+            // dsh 的 latest 可能比 next 更旧，而它的依赖范围会被 npm 解析到更新的版本，
+            // 结果就是 CLI 停在旧版、所有插件包升到新版（版本偏斜），启动即报错。
+            var version = DshInstaller.ResolveVersion(registry);
+            if (version is null)
+            {
+                ShowStatus(
+                    $"{action}失败",
+                    $"更新源 {registry.Name} 上没有可用的 dsh 版本。\n请稍后重试，或在设置中手动指定 dsh 路径。",
+                    isError: true);
+                return false;
+            }
             AppendStartupLog($"[dsh] 已选择更新源：{registry.Name}（{registry.LatencyMs}ms）");
-            AppendStartupLog("[dsh] 开始安装 @deepseek-ai/dsh@latest …");
+            AppendStartupLog($"[dsh] 开始安装 @deepseek-ai/dsh@{version} …");
 
             using var cts = new CancellationTokenSource();
             var progress = new Progress<string>(line =>
@@ -632,32 +745,32 @@ public sealed partial class MainWindow : Window
                 }
             });
 
-            var result = await DshUpdater.UpgradeAsync("latest", registry.Url, progress, cts.Token);
+            var result = await DshUpdater.UpgradeAsync(version, registry.Url, progress, cts.Token);
 
             if (result.Cancelled)
             {
                 ShowStatus(
-                    "自动安装已取消",
+                    $"{action}已取消",
                     "可在网络就绪后点击工具栏「重新加载」重试。",
                     isError: true);
                 return false;
             }
             if (!result.Success)
             {
-                AppendStartupLog(string.IsNullOrWhiteSpace(result.Output) ? "[dsh] 安装失败" : result.Output);
+                AppendStartupLog(string.IsNullOrWhiteSpace(result.Output) ? $"[dsh] {action}失败" : result.Output);
                 ShowStatus(
-                    "自动安装失败",
+                    $"{action}失败",
                     "npm 安装未成功，详情见下方日志。\n可点击工具栏「重新加载」重试，或在设置中手动指定 dsh 路径。",
                     isError: true);
                 return false;
             }
 
-            AppendStartupLog($"[dsh] 安装完成：{DshUpdater.GetLocalVersion() ?? "已安装"}");
+            AppendStartupLog($"[dsh] {action}完成：{DshUpdater.GetLocalVersion() ?? "已安装"}");
             return true;
         }
         catch (Exception ex)
         {
-            ShowStatus("自动安装失败", ex.Message, isError: true);
+            ShowStatus($"{action}失败", ex.Message, isError: true);
             return false;
         }
         finally
@@ -670,7 +783,8 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _host.Stop();
+            // 等待进程树真正退出后再重启，避免残留进程占用端口 / 文件
+            await _host.StopAsync();
             _navigatedToApp = false;
             _currentUrl = null;
             await RunStartupAsync();
@@ -715,6 +829,8 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        _startTimeoutCts?.Cancel();
+        _startTimeoutCts?.Dispose();
         _host.Dispose();
     }
 

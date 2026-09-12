@@ -6,7 +6,7 @@
 
 > 把 DeepSeek Harness 装进一个原生 Windows 窗口 —— **装完即用，像用普通软件一样简单**。
 
-![版本](https://img.shields.io/badge/版本-0.7.0-2b6cb0)
+![版本](https://img.shields.io/badge/版本-0.7.1-2b6cb0)
 ![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-0078d4)
 ![框架](https://img.shields.io/badge/.NET-8.0-512bd4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%2C%20dsh%20首次启动自动安装-4ea04e)
@@ -47,7 +47,7 @@
 
 ## 📥 安装
 
-双击 `artifacts/DshDesktop-Setup-0.7.0.exe`，按向导一路「下一步」即可，无需管理员权限。
+双击 `artifacts/DshDesktop-Setup-0.7.1.exe`，按向导一路「下一步」即可，无需管理员权限。
 安装时若检测到缺少 WebView2 Runtime 会给出提示。
 
 > 免安装版：`artifacts/win-x64/DshDesktop.exe`，解压即用。
@@ -118,7 +118,7 @@ scripts\build-all.cmd
 
 产物：
 - `artifacts/win-x64/DshDesktop.exe` — 免安装直接运行（含捆绑的 node/npm 运行时）
-- `artifacts/DshDesktop-Setup-0.7.0.exe` — 安装器
+- `artifacts/DshDesktop-Setup-0.7.1.exe` — 安装器
 
 仅需开发调试：
 
@@ -182,6 +182,14 @@ scripts\verify-artifacts.cmd
   换到有写权限的盘，再点工具栏「重新加载」重试，或在「设置」中手动指定 dsh 路径。
 - **提示「dsh web authentication required」**：请升级到 v0.7.0（旧版本未捕获 dsh 0.1.2 的
   鉴权 token）。若仍出现，多半是安装了过旧的 dsh，可在「检查更新」里升级。
+- **更新 dsh 后启动报错，以前只能删光安装目录重装**：v0.7.1 起已修复。旧版用 npm 的
+  `latest` 标签安装，而 dsh 的 `latest` 可能比 `next` 更旧、其依赖范围却被 npm 解析到更新的
+  版本，于是 CLI 与插件包版本不一致（版本偏斜）。现在改为安装**确切版本**，并采用
+  「暂存安装 → 校验 → 整体替换」的方式更新；启动时若发现已安装的 dsh 不一致，还会自动重装修复。
+- **升级后插件树要不要刷新**：dsh 的插件树在 `~/.dsh/profiles/web`，由它自己的 pnpm 锁文件管理，
+  升级 CLI 不会自动重解析。若升级后仍报插件相关错误，可在「设置」里确认已开启
+  **「升级 dsh 后刷新插件树」**（默认开启），或手动在该目录执行 `pnpm update`
+  （等价于 `dsh plugin --profile web update`）。
 - **插件安装 / 恢复需要联网**：`dsh plugin` 通过 pnpm 从 npm registry 安装，需联网。
 - **插件导致崩溃被自动屏蔽**：应用会卸载报错插件并以安全配置重启。可在「插件」对话框
   「已屏蔽」分区里选择「恢复」重新安装尝试。

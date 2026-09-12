@@ -5,6 +5,43 @@
 
 ---
 
+## [0.7.1] — 2026-09-12
+
+### 🇬🇧 English
+
+🐛 **Fixes — dsh updates used to leave a broken install**
+
+- **Fixed the version skew that broke updates.** The app used to install the `latest` npm tag. For dsh, `latest` (0.1.5-rc.1) can be *older* than `next` (0.1.5-rc.2), while dsh's own dependency ranges (`^0.1.5-rc.1`) resolve to the newest matching prerelease — so npm produced a tree where the CLI stayed on rc.1 while every plugin package (`dsh-base`, `dsh-web-app`, `dsh-web-frontend`, …) jumped to rc.2. The app now resolves the **exact** version (the newer of `latest`/`next`) and installs that, so CLI and plugins always match.
+- **Updates are now staged, verified and swapped atomically.** Instead of running `npm install` over the live directory — which leaves stale and file-locked leftovers behind and produced a half-updated tree — the app installs into a staging folder, verifies the result, then swaps it into place, rolling back automatically on failure. This is the automated equivalent of the "delete everything and reinstall" workaround users previously had to do by hand.
+- **The dsh process tree is now fully stopped before updating**, so npm no longer collides with locked files.
+- **Startup self-check & self-heal.** If the managed dsh installation is found to be inconsistent, the app reinstalls it automatically instead of failing to start.
+- **Fixed the Huawei Cloud npm mirror URL** — `registry.huaweicloud.com` does not resolve; the correct host is `repo.huaweicloud.com`. One of the four mirrors was therefore always unreachable.
+- **The crash-recovery path can no longer crash the app**: exceptions raised while auto-disabling a failing plugin are now caught and written to the startup log.
+- **New setting: "Refresh plugin tree after upgrading dsh" (on by default).** dsh's plugin tree lives in `~/.dsh/profiles/web` and is managed by its own pnpm lockfile; upgrading the CLI never re-resolves it, so a third-party plugin could keep depending on an older `@deepseek-ai/dsh-*`. When enabled, the app runs `pnpm update` in the profile directory after a successful upgrade (and reports the result).
+
+### 🇨🇳 中文
+
+🐛 **修复 —— 之前 dsh 更新会留下损坏的安装**
+
+- **修复导致更新损坏的"版本偏斜"问题。** 应用过去安装 npm 的 `latest` 标签。但对 dsh 而言
+  `latest`（0.1.5-rc.1）可能比 `next`（0.1.5-rc.2）**更旧**，而 dsh 声明的依赖范围
+  `^0.1.5-rc.1` 会被 npm 解析到该范围内最新的预发布版 —— 于是 npm 装出的树里
+  CLI 停在 rc.1，而全部插件包（`dsh-base`、`dsh-web-app`、`dsh-web-frontend` …）升到了 rc.2。
+  现在应用会解析出**确切版本**（`latest` 与 `next` 中较新者）再安装，CLI 与插件包永远一致。
+- **更新改为"暂存安装 → 校验 → 整体替换"。** 过去直接在正在使用的目录上跑 `npm install`，
+  陈旧文件与被占用（文件锁）的文件会残留，装出半新半旧的树；现在先装到暂存目录、校验通过后
+  再整体换上去，失败自动回滚 —— 等于把用户此前"删光整个目录再重装"的手工操作自动化了。
+- **更新前会把 dsh 进程树彻底停掉**，npm 不再和文件锁冲突。
+- **启动自检 + 自愈。** 若发现自动安装目录里的 dsh 不一致，应用会自动重装修复，而不是启动失败。
+- **修正华为云 npm 镜像地址** —— `registry.huaweicloud.com` 无法解析，正确的是
+  `repo.huaweicloud.com`；此前四个镜像源里总有一个是死的。
+- **崩溃恢复路径自身不会再搞崩应用**：自动屏蔽出错插件时的异常现在会被捕获并写入启动日志。
+- **新增设置项「升级 dsh 后刷新插件树」（默认开启）。** dsh 的插件树位于 `~/.dsh/profiles/web`，
+  由它自己的 pnpm 锁文件管理；升级 CLI 并不会重解析它，因此第三方插件可能仍依赖较旧的
+  `@deepseek-ai/dsh-*`。开启后，升级成功会在该 profile 目录执行一次 `pnpm update` 并反馈结果。
+
+---
+
 ## [0.7.0] — 2026-09-05
 
 ### 🇬🇧 English

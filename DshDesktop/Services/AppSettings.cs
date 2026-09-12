@@ -25,6 +25,14 @@ public sealed class AppSettings
     /// <summary>多来源叠加模式下启用的来源 Id 列表。</summary>
     public List<string> EnabledPluginSources { get; set; } = new() { "dsh-market", "npm", "npmmirror" };
 
+    /// <summary>
+    /// 升级 dsh 之后是否刷新 web profile 的插件树（等价于在 profile 目录执行 <c>pnpm update</c>）。
+    /// dsh 的插件树由 profile 目录（<c>~/.dsh/profiles/web</c>）下的 pnpm 独立管理，
+    /// 升级 CLI 并不会自动重解析它；不刷新就可能出现"插件依赖的 @deepseek-ai/* 版本仍是旧的"
+    /// 从而启动报错。默认开启。
+    /// </summary>
+    public bool RefreshProfileAfterUpdate { get; set; } = true;
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "DshDesktop",
