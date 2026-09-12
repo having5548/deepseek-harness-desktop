@@ -158,6 +158,18 @@ public static class DshInstaller
                     $"替换安装目录失败，原有安装已保留：\n{swapProblem}");
             }
 
+            // 安装目录已被整体替换：清除模块回退缓存，让 dsh 下次启动依据新安装重建。
+            // 否则 profile 可能因链接缺失/悬空而解析不到 @deepseek-ai/dsh-*，启动即报
+            // "Cannot find package ... imported from ...\.dsh\profiles\web\"。
+            if (ResetProfileModuleFallback(out var resetDetail))
+            {
+                progress?.Report("[清理] 已重置模块回退缓存，dsh 将在启动时重建。");
+            }
+            else
+            {
+                progress?.Report("[清理] 重置模块回退缓存失败（启动自检会重试）：" + resetDetail);
+            }
+
             progress?.Report($"[完成] dsh 已更新到 {version}");
             return new DshUpgradeResult(true, false, $"dsh 已更新到 {version}。");
         }
@@ -525,6 +537,188 @@ public static class DshInstaller
         catch
         {
             // 清理失败不影响功能
+        }
+    }
+
+    // ── 模块回退缓存（$DSH_HOME/profiles/node_modules）────────
+    //
+    // dsh 并不把 in-box bundles（@deepseek-ai/dsh-base、dsh-web-app 及其 dsh-client-ui-* 依赖）
+    // 装进 profile 目录，而是用 $DSH_HOME/profiles/node_modules 这个"符号链接农场"把
+    // 安装目录的依赖闭包暴露给 profile —— Node 解析裸包名时会向上走到 profiles/node_modules。
+    //
+    // 一旦安装目录被整体替换（升级 / 重装）而这个缓存没被重建，链接就会缺失或悬空，
+    // profile 随即解析不到这些包，启动时报：
+    //   Cannot find package '@deepseek-ai/dsh-client-ui-...' imported from ...\.dsh\profiles\web\
+    // 这正是"更新后必须删光所有文件重装"的真正原因。
+    //
+    // 该缓存是纯派生数据：删掉后 dsh 下次启动会依据当前安装重建，因此这里用"检测 + 清除"
+    // 代替代价高昂的重装。
+
+    /// <summary>
+    /// 校验模块回退缓存是否与当前安装匹配。缓存或 profile 目录尚不存在时视为健康
+    /// （交给 dsh 首次启动自行创建）。
+    /// </summary>
+    public static bool IsProfileModuleFallbackHealthy(out string problem)
+    {
+        problem = string.Empty;
+
+        var fallback = DshPaths.ProfileModuleFallbackDir;
+        if (!Directory.Exists(fallback))
+        {
+            return true; // 还没生成过，dsh 启动时会建
+        }
+
+        var scopeDir = DshPaths.InstalledScopeDir;
+        if (!Directory.Exists(scopeDir))
+        {
+            return true;
+        }
+
+        var fallbackScope = Path.Combine(fallback, "@deepseek-ai");
+
+        // 1) 安装目录里有的包，缓存里必须能解析到（Directory.Exists 对"缺失"和
+        //    "符号链接悬空"都返回 false，两种情况都说明该重建）
+        foreach (var packageDir in Directory.EnumerateDirectories(scopeDir))
+        {
+            var name = Path.GetFileName(packageDir);
+            if (!Directory.Exists(Path.Combine(fallbackScope, name)))
+            {
+                problem = $"模块回退缓存缺少或已失效的条目：{name}";
+                return false;
+            }
+        }
+
+        // 2) 缓存里指向已不存在目标的残留条目（包已被新版本移除）同样要重建
+        if (Directory.Exists(fallbackScope))
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(fallbackScope))
+            {
+                if (!Directory.Exists(entry) && !File.Exists(entry))
+                {
+                    problem = $"模块回退缓存存在失效条目：{Path.GetFileName(entry)}";
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 清除模块回退缓存，迫使 dsh 在下次启动时依据当前安装重新生成。
+    /// 若缓存本就不存在则视为成功。
+    /// </summary>
+    public static bool ResetProfileModuleFallback(out string detail)
+    {
+        detail = string.Empty;
+        var fallback = DshPaths.ProfileModuleFallbackDir;
+        if (!Directory.Exists(fallback))
+        {
+            return true;
+        }
+
+        try
+        {
+            DeleteTreeWithoutFollowingLinks(fallback);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            detail = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>检测并按需清除模块回退缓存；返回是否执行了清除。</summary>
+    public static bool RepairProfileModuleFallbackIfNeeded(out string detail)
+    {
+        detail = string.Empty;
+        if (IsProfileModuleFallbackHealthy(out var problem))
+        {
+            return false;
+        }
+        detail = problem;
+        ResetProfileModuleFallback(out _);
+        return true;
+    }
+
+    /// <summary>
+    /// 删除回退缓存目录树。
+    ///
+    /// <para><b>刻意不使用 <c>Directory.Delete(recursive: true)</c>：</b>该目录里是成百上千个
+    /// <b>符号链接</b>，一旦递归删除跟进链接，就会删到链接指向的真实安装目录（数据丢失）。
+    /// 这里逐项删除链接本身，再删空目录。目录结构固定为两层（<c>@scope/pkg</c> 或 <c>pkg</c>）。</para>
+    /// </summary>
+    private static void DeleteTreeWithoutFollowingLinks(string root)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+        {
+            if (IsReparsePoint(entry) || File.Exists(entry))
+            {
+                DeleteLinkOrFile(entry);
+                continue;
+            }
+
+            // 真实目录（只可能是 @scope 作用域目录），其子项同样只删链接本身
+            foreach (var child in Directory.EnumerateFileSystemEntries(entry))
+            {
+                if (IsReparsePoint(child) || File.Exists(child))
+                {
+                    DeleteLinkOrFile(child);
+                }
+                else
+                {
+                    TryDeleteDirectory(child);
+                }
+            }
+            TryDeleteDirectory(entry);
+        }
+        TryDeleteDirectory(root);
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>删除链接或文件本身（非递归），绝不进入链接目标。</summary>
+    private static void DeleteLinkOrFile(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: false);
+            return;
+        }
+        catch
+        {
+            // 非目录型链接走下面的文件删除
+        }
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // 删不掉就留下，dsh 启动时仍会自行对账
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: false);
+        }
+        catch
+        {
+            // 非空或被占用则保留，不是致命问题
         }
     }
 

@@ -648,6 +648,23 @@ public sealed partial class MainWindow : Window
                 }
             }
 
+            // 自检并自愈（二）：dsh 的"模块回退"缓存（$DSH_HOME/profiles/node_modules）若缺少条目
+            // 或符号链接悬空，profile 就解析不到 @deepseek-ai/dsh-*，启动时会报
+            //   Cannot find package '@deepseek-ai/dsh-client-ui-...' imported from ...\.dsh\profiles\web\
+            // 该缓存是纯派生数据，清除后 dsh 下次启动会依据当前安装重建 —— 无需删光目录重装。
+            if (fromManagedInstall && !DshInstaller.IsProfileModuleFallbackHealthy(out var fallbackProblem))
+            {
+                AppendStartupLog("[自检] 检测到模块回退缓存异常：" + fallbackProblem);
+                if (DshInstaller.ResetProfileModuleFallback(out var resetDetail))
+                {
+                    AppendStartupLog("[自检] 已清除回退缓存，dsh 启动时会自动重建。");
+                }
+                else
+                {
+                    AppendStartupLog("[自检] 清除回退缓存失败：" + resetDetail);
+                }
+            }
+
             if (runtime is null)
             {
                 ShowStatus(

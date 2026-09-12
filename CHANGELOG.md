@@ -5,6 +5,40 @@
 
 ---
 
+## [0.7.2] — 2026-09-12
+
+### 🇬🇧 English
+
+🐛 **Fixes — the real reason updates used to require "delete everything and reinstall"**
+
+- **The module-fallback cache is now invalidated on upgrade.** dsh does *not* install its in-box bundles
+  (`@deepseek-ai/dsh-base`, `dsh-web-app` and their `dsh-client-ui-*` dependencies) into the profile.
+  Instead it exposes its own dependency closure to every profile through a symlink farm at
+  `$DSH_HOME/profiles/node_modules`. Replacing the dsh install tree could leave those links missing or
+  dangling, so the profile stopped resolving them and boot failed with:
+  `Cannot find package '@deepseek-ai/dsh-client-ui-…' imported from …\.dsh\profiles\web\`
+  The app now clears that cache after every successful install/upgrade, so dsh rebuilds it on the next boot.
+- **Startup self-check now validates the fallback cache too** (missing entries or dangling links) and clears
+  it automatically — no more wiping `%USERPROFILE%\.dsh` by hand. The cache is deleted entry-by-entry and
+  never recursively follows symlinks, so it can never touch the real installation.
+- Version bumped to **0.7.2**.
+
+### 🇨🇳 中文
+
+🐛 **修复 —— "更新后必须删光所有文件重装"的真正原因**
+
+- **升级后会失效"模块回退缓存"。** dsh 并不把 in-box bundles（`@deepseek-ai/dsh-base`、`dsh-web-app`
+  及其 `dsh-client-ui-*` 依赖）装进 profile，而是用 `$DSH_HOME/profiles/node_modules` 这个符号链接
+  农场把自己的依赖闭包暴露给每个 profile。替换 dsh 安装目录后，这些链接可能缺失或悬空，profile 便
+  解析不到它们，启动时报：
+  `Cannot find package '@deepseek-ai/dsh-client-ui-…' imported from …\.dsh\profiles\web\`
+  现在每次安装/升级成功后会清除该缓存，由 dsh 在下次启动时重建。
+- **启动自检也会校验该回退缓存**（条目缺失或链接悬空），并自动清除，无需再手动删掉
+  `%USERPROFILE%\.dsh`。清除时逐项删除链接、绝不递归跟进符号链接，因此绝不会误删真实安装目录。
+- 版本号升至 **0.7.2**。
+
+---
+
 ## [0.7.1] — 2026-09-12
 
 ### 🇬🇧 English
