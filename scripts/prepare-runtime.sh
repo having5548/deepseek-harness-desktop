@@ -47,6 +47,7 @@ if [ ! -x "$RT/node" ]; then
   cp "$TMP/node-v${NODE_VERSION}-${NODE_DIST}/bin/node" "$RT/node"
   chmod +x "$RT/node"
   rm -rf "$RT/node_modules/npm"
+  mkdir -p "$RT/node_modules"
   cp -R "$TMP/node-v${NODE_VERSION}-${NODE_DIST}/lib/node_modules/npm" "$RT/node_modules/npm"
   log "node $( "$RT/node" --version ) bundled"
 else
