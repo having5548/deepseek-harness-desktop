@@ -3,7 +3,9 @@
 //! 原生窗口直接导航到 dsh web 服务地址（鉴权 cookie 依赖顶级导航上下文），
 //! 工具栏功能由原生菜单提供；状态/日志/插件/设置各为独立本地页面窗口。
 
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// 无条件 GUI 子系统：任何构建（含 debug）都不带控制台窗口，
+// 前台永远只有应用主窗口。调试输出走应用内「启动日志」窗口，不依赖终端。
+#![windows_subsystem = "windows"]
 
 mod commands;
 mod host;

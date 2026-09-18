@@ -5,6 +5,35 @@
 
 ---
 
+## [1.0.2] — 2026-09-19
+
+### 🇬🇧 English
+
+🔇 **Foreground guarantee: the app window is the only window, ever.**
+
+- The executable now uses the GUI subsystem **unconditionally** — debug builds no longer carry a
+  console window either (previously `windows_subsystem = "windows"` only applied to release, so
+  running the debug exe showed a permanent terminal next to the app).
+- Audited every process spawn site (dsh service / npm / dsh plugin / taskkill / tasklist): all carry
+  `CREATE_NO_WINDOW`; grandchildren inherit the hidden console, so no command in the whole process
+  tree can surface a window or steal focus. The only visible side effect is the user-initiated
+  "open in system browser" action.
+- Version bumped to **1.0.2**.
+
+### 🇨🇳 中文
+
+🔇 **前台保证：任何情况下前台只有应用主窗口。**
+
+- 主程序无条件使用 GUI 子系统 —— **debug 构建也不再带控制台窗口**（此前
+  `windows_subsystem = "windows"` 只对 release 生效，直接跑 debug 版 exe 会在主窗口旁边
+  常驻一个终端窗口）。
+- 审计了全部子进程创建点（dsh 服务 / npm / dsh 插件 / taskkill / tasklist）：统一带
+  `CREATE_NO_WINDOW`；孙进程继承隐藏控制台 —— 整棵进程树中的任何命令都不可能弹出窗口或抢焦点。
+  唯一的可见副作用是用户主动点击的「在系统浏览器中打开」。
+- 版本号升至 **1.0.2**。
+
+---
+
 ## [1.0.1] — 2026-09-19
 
 ### 🇬🇧 English

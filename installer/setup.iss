@@ -2,7 +2,7 @@
 ; 用法: iscc.exe installer\setup.iss
 ;   （先运行 scripts\build-all.cmd 完成编译，产物在 src-tauri\target\release）
 #define MyAppName "DeepSeek Harness Desktop"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "DeepSeek AI"
 #define MyAppExeName "DshDesktop.exe"
 #define SourceDir "..\src-tauri\target\release"
