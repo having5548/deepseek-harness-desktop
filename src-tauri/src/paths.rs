@@ -62,9 +62,12 @@ pub fn bundled_npm_cli() -> PathBuf {
 }
 
 /// dsh 安装根目录：
-/// - Windows：应用所在盘根的 `DeepSeek Harness` 文件夹（与 C# 版一致，旧安装可直接复用）；
-/// - Linux/macOS：`$XDG_DATA_HOME`（默认 `~/.local/share`）下的 `DeepSeek Harness`；
-/// - 可用环境变量 `DSH_INSTALL_ROOT` 覆盖（测试 / 高级用法）。
+/// - 环境变量 `DSH_INSTALL_ROOT` 最优先（测试 / 高级用法）；
+/// - Windows：应用所在盘根的 `DeepSeek Harness` 文件夹（与 C# 版一致）。
+///   若应用所在盘没有已装好的 dsh，会扫描其他盘符找回旧安装
+///   （例如旧 C# 版应用装在 H 盘、新版装到 C 盘时，直接复用 `H:\DeepSeek Harness`，
+///   不重新下载）；都没有才在应用所在盘新建；
+/// - Linux/macOS：`$XDG_DATA_HOME`（默认 `~/.local/share`）下的 `DeepSeek Harness`。
 pub fn install_root() -> PathBuf {
     if let Ok(root) = std::env::var("DSH_INSTALL_ROOT") {
         if !root.trim().is_empty() {
@@ -77,12 +80,40 @@ pub fn install_root() -> PathBuf {
             .ancestors()
             .last()
             .unwrap_or_else(|| Path::new("C:\\"))
-            .to_string_lossy()
-            .to_string();
-        Path::new(&drive_root).join("DeepSeek Harness")
+            .to_path_buf();
+        let app_drive_root = drive_root.join("DeepSeek Harness");
+
+        // 1. 应用所在盘已有 dsh（C# 版绑定规则，优先级最高）
+        if is_managed_install_at(&app_drive_root) {
+            return app_drive_root;
+        }
+
+        // 2. 其他盘符上已有 dsh → 复用旧安装（应用换盘后不至于重复下载一份）
+        for letter in b'B'..=b'Z' {
+            let candidate = Path::new(&format!("{}:\\", letter as char)).join("DeepSeek Harness");
+            if candidate == app_drive_root {
+                continue;
+            }
+            if is_managed_install_at(&candidate) {
+                return candidate;
+            }
+        }
+
+        // 3. 全新安装 → 应用所在盘（与 C# 版一致）
+        app_drive_root
     } else {
         data_home().join("DeepSeek Harness")
     }
+}
+
+/// 判定某目录是否为一次完整可用的 dsh 托管安装（以 bin.js 存在为准，与定位逻辑一致）。
+fn is_managed_install_at(root: &Path) -> bool {
+    root.join("node_modules")
+        .join("@deepseek-ai")
+        .join("dsh")
+        .join("lib")
+        .join("bin.js")
+        .is_file()
 }
 
 /// npm 把 dsh 装到安装根目录下的 node_modules/@deepseek-ai/dsh。

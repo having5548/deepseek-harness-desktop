@@ -5,9 +5,9 @@
 # 🚀 DeepSeek Harness 桌面客户端（Rust / Tauri 版）
 
 > 把 DeepSeek Harness 装进一个原生窗口 —— **装完即用，像用普通软件一样简单**。
-> v1.0.0 起由 C#/WinUI 3 完全重写为 **Rust + Tauri 2**，跨 Windows / macOS / Linux。
+> v1.0.1 起由 C#/WinUI 3 完全重写为 **Rust + Tauri 2**，跨 Windows / macOS / Linux。
 
-![版本](https://img.shields.io/badge/版本-1.0.0-2b6cb0)
+![版本](https://img.shields.io/badge/版本-1.0.1-2b6cb0)
 ![框架](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![平台](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%2C%20dsh%20首次启动自动安装-4ea04e)
@@ -50,8 +50,8 @@
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.0-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.0_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.1-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.1_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | 未签名，首次打开需右键 → 打开 |
 
 > 免安装版（Windows）：`src-tauri/target/release/DshDesktop.exe`（需与 `resources/` 目录放在一起）。
@@ -102,7 +102,7 @@ scripts\build-all.cmd
 → `tauri build --no-bundle` → Inno Setup 打包 → 产物：
 
 - `src-tauri/target/release/DshDesktop.exe` — 免安装直接运行
-- `artifacts/DshDesktop-Setup-1.0.0-rust.exe` — 安装器
+- `artifacts/DshDesktop-Setup-1.0.1-rust.exe` — 安装器
 
 ### Linux 构建 .deb（Ubuntu / Debian / UOS）
 
@@ -171,7 +171,7 @@ deepseek-harness-desktop-rust/
   检查网络后点菜单「导航 → 重新连接服务」重试，或在「设置」中手动指定 dsh 路径。
 - **提示「dsh web authentication required」**：本版完整捕获鉴权 token；若仍出现，说明安装的 dsh 过旧，
   可在「工具 → 检查更新」升级。
-- **更新 dsh 后启动报错**：v1.0.0 已内置版本偏斜检测 + 模块回退缓存自愈，启动时会自动重装修复，无需手动删除目录。
+- **更新 dsh 后启动报错**：v1.0.1 已内置版本偏斜检测 + 模块回退缓存自愈，启动时会自动重装修复，无需手动删除目录。
 - **升级后插件树要不要刷新**：设置中「升级 dsh 后刷新插件树」默认开启（等价于在 profile 目录执行 `pnpm update`）。
 - **插件导致崩溃被自动屏蔽**：可在「插件管理 → 已屏蔽」分区「恢复」。
 - **Linux 提示缺 webkit**：Tauri 2 需要 `libwebkit2gtk-4.1`（Ubuntu 22.04+ / Debian 12+ / deepin 23 / UOS 1070 自带）。

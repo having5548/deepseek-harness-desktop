@@ -200,7 +200,11 @@ fn path_separator() -> &'static str {
     }
 }
 
-/// 平台相关的进程设置：Unix 上放到独立进程组，便于整组终止。
+/// 平台相关的进程设置：
+/// Unix 上放到独立进程组（便于整组终止）；
+/// Windows 上加 CREATE_NO_WINDOW —— GUI 程序启动控制台子系统子进程
+/// （node/npm/pnpm）默认会弹出新控制台窗口，必须显式隐藏
+/// （对应 C# 版 ProcessStartInfo.CreateNoWindow = true）。
 pub fn apply_platform_process_setup(cmd: &mut tokio::process::Command) {
     #[cfg(unix)]
     {
@@ -209,7 +213,8 @@ pub fn apply_platform_process_setup(cmd: &mut tokio::process::Command) {
     }
     #[cfg(windows)]
     {
-        let _ = cmd;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
 }
 

@@ -5,6 +5,35 @@
 
 ---
 
+## [1.0.1] — 2026-09-19
+
+### 🇬🇧 English
+
+🐛 **Fixes**
+
+- **No console windows flash at startup / during operations.** Console-subsystem children
+  (node/npm/pnpm spawned by the GUI process) now carry `CREATE_NO_WINDOW`, matching the C# version's
+  `CreateNoWindow = true`. Missed during the port — every dsh/npm/pnpm spawn flashed a console window.
+- **Cross-drive install reuse.** The dsh install root stays bound to the app's drive (C# rule). If the
+  app's drive has no managed install, the app now scans other drive letters for an existing
+  `X:\DeepSeek Harness` and reuses it instead of downloading a second copy (e.g. old app on H:,
+  new build installed to C:).
+- Version bumped to **1.0.1**.
+
+### 🇨🇳 中文
+
+🐛 **修复**
+
+- **启动/操作时不再弹出命令行窗口。** GUI 进程启动的控制台子系统子进程（node/npm/pnpm）现在统一带
+  `CREATE_NO_WINDOW`，对齐 C# 版的 `CreateNoWindow = true`。移植时漏掉了这一项，导致每次拉起
+  dsh/npm/pnpm 都会闪一个控制台窗口。
+- **跨盘复用旧安装。** dsh 安装根仍绑定应用所在盘（C# 规则）；若应用所在盘没有完整安装，
+  现在会扫描其他盘符找回已有的 `X:\DeepSeek Harness` 直接复用，而不是重新下载第二份
+  （例如旧版应用在 H 盘、新版装到 C 盘的场景）。
+- 版本号升至 **1.0.1**。
+
+---
+
 ## [1.0.0] — 2026-09-19
 
 ### 🇬🇧 English
