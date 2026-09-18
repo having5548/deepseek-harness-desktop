@@ -31,7 +31,8 @@ ArchitecturesAllowed=x64compatible
 CloseApplications=yes
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; ChineseSimplified.isl 随仓库分发（文件头含译者分发许可），CI 上的 Inno Setup 6 也能出中文安装器
+Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
