@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DeepSeek Harness Desktop",
+  "mainBinaryName": "DshDesktop",
+  "version": "1.0.0",
+  "identifier": "com.deepseek.dshdesktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "DeepSeek Harness",
+        "url": "index.html",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 860,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "shortDescription": "DeepSeek Harness 桌面客户端",
+    "longDescription": "把 DeepSeek Harness (dsh) 的 Web UI 包装成原生桌面应用：自动管理 dsh 安装/升级、插件市场、崩溃自愈。Windows / macOS / Linux（Ubuntu、UOS、Debian）。",
+    "copyright": "MIT",
+    "targets": ["deb", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "resources": ["resources/runtime/**/*"],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      }
+    }
+  }
+}

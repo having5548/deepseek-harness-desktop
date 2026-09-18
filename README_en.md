@@ -1,21 +1,21 @@
-> 🇨🇳 **For Chinese readers:** 中文版请见 → [**README.md**](README.md)
+> 🌐 **中文用户请看** → [**README.md**](README.md)
 
 ---
 
-# 🚀 DeepSeek Harness Desktop (Windows)
+# 🚀 DeepSeek Harness Desktop (Rust / Tauri)
 
-> DeepSeek Harness in a native Windows window — **install and go, as easy as any normal app**.
+> Put DeepSeek Harness in a native window — **install and use it like any ordinary app**.
+> Since v1.0.0 the app is fully rewritten from C#/WinUI 3 to **Rust + Tauri 2**, cross-platform on Windows / macOS / Linux.
 
-![Version](https://img.shields.io/badge/version-0.7.2-2b6cb0)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
-![Framework](https://img.shields.io/badge/.NET-8.0-512bd4)
-![Runtime](https://img.shields.io/badge/runtime-Bundled%20Node.js%2C%20dsh%20auto-installed%20on%20first%20launch-4ea04e)
+![Version](https://img.shields.io/badge/version-1.0.0-2b6cb0)
+![Framework](https://img.shields.io/badge/Rust-Tauri%202-dea584)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
+![Runtime](https://img.shields.io/badge/runtime-bundled%20Node.js%2C%20dsh%20auto--install%20on%20first%20launch-4ea04e)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A native desktop shell built with **WinUI 3** + **WebView2** that wraps DeepSeek Harness's
-Web UI (`dsh web`) into a Windows app. It quietly spins up a local `dsh web` service process,
-embeds the `http://127.0.0.1:<port>/?token=...` interface into a native window via WebView2, and
-cleans everything up when you quit — no leftover processes.
+A native window embedding the system WebView that wraps the DeepSeek Harness web UI (`dsh web`).
+The app spawns a local `dsh web` service process, parses the authenticated URL, and navigates to
+`http://127.0.0.1:<port>/?token=...`. On exit the whole child process tree is terminated — **nothing is left behind**.
 
 ---
 
@@ -23,204 +23,144 @@ cleans everything up when you quit — no leftover processes.
 
 | | |
 |---|---|
-| 🪄 **Zero CLI setup** | The installer ships Node.js; on first launch the app downloads the latest dsh automatically (fastest mirror auto-selected) — **nothing to install by hand** |
-| 🧩 **Auto-installed & bound** | dsh is installed into its own folder (`DeepSeek Harness` on the app's drive), located & reused automatically; survives app upgrades/reinstalls |
-| 🖥️ **Native experience** | Modern WinUI 3 window + WebView2 rendering, with its own user-data dir separate from system Edge |
-| 🔌 **Plugin marketplace** | Discover and install plugins from multiple sources (DSH Market / npm / npmmirror); service auto-restarts after install |
-| 🩹 **Crash self-healing** | Plugin crashed the service? Auto-block + restart with safe config, log popup, one-click recovery |
-| 🎛️ **Handy toolbar** | Back / Forward / Reload / Open in browser / Check for updates / Plugins / Settings, all in one place |
+| 🪄 **Zero CLI prerequisite** | The installer bundles a Node.js runtime; on first launch the latest dsh is installed automatically (fastest-mirror detection) — **nothing to set up manually** |
+| 🧩 **Auto-binding** | dsh is installed into a dedicated folder, located and reused automatically across app upgrades/reinstalls |
+| 🖥️ **Native experience** | Tauri native window + system menu bar (Navigate / Tools), WebView renders the service UI |
+| 🔌 **Plugin marketplace** | Discover and one-click install plugins from multiple sources (DSH Market / npm / npmmirror); service restarts automatically |
+| 🩹 **Crash self-healing** | A broken plugin crashes the service? It gets blocked + uninstalled automatically, the service restarts safely, and you can restore it from the plugin manager |
+| 🪶 **Lightweight** | Native Rust binary — no ~200MB .NET runtime bundled anymore |
 
-### More details
+### Feature parity with the C# version (v0.7.2)
 
-- On first launch, if dsh is missing: pings **npm official / npmmirror / Tencent / Huawei** mirrors,
-  picks the lowest-latency one, installs `latest`, and streams progress into the **black startup log console**
-- If dsh already exists it is reused as-is (no re-download); use the toolbar "Check for updates" to upgrade manually
-- Auto-starts `dsh web` with `--no-open --port 0`; the OS assigns a free port, so **no port conflicts ever**
-- Captures the full authenticated URL from dsh web (including `?token=...`), so the WebView never trips auth errors
-- When a plugin fails to load: auto-uninstall the culprit → restart with safe config → popup showing
-  the plugin name & error log, offering "Restart" or "Restore plugin"
-- Unified title bar: content extends into the title bar; navigation & actions sit in one draggable modern bar
-- You can manually specify a fallback dsh executable path in Settings
-- Kills the whole process tree with `taskkill /T /F` on exit — **no leftovers**
-- Inno Setup installer: Start Menu + desktop shortcut + uninstaller, **no admin required**
-
----
-
-## 📥 Installation
-
-Double-click `artifacts/DshDesktop-Setup-0.7.2.exe` and follow the wizard — no admin rights needed.
-The installer will warn you if the WebView2 Runtime is missing.
-
-> Portable version: `artifacts/win-x64/DshDesktop.exe` — unzip and run.
+- First-launch auto install: pings **npm official / npmmirror / Tencent / Huawei** mirrors in parallel and
+  installs the **exact version** resolved from `latest`/`next` (eliminating the "latest-tag version skew" failure mode)
+- **Staged install → verify → atomic swap** upgrades with automatic rollback — never leaves a half-old/half-new install
+- Startup self-checks: version-skew auto-repair; the `$DSH_HOME/profiles/node_modules` module fallback cache
+  is validated and cleared automatically (the real fix behind "must delete everything and reinstall after update")
+- Service runs with `--profile web --no-open --port 0` (OS-assigned free port); the full auth token URL is captured
+- Plugin crash flow: offending plugins are blocked and uninstalled → safe restart → dialog with the log; restorable
+- 45s startup timeout notice; manual update check / dsh upgrade (optionally refreshing the plugin tree afterwards)
+- Kills the entire process tree on exit (`taskkill /T /F` on Windows, process-group signal on Unix)
+- External links (`target=_blank`) open in the system browser; isolated WebView user-data directory
+- Settings: manual dsh path (dsh.cmd / dsh.exe / bin.js / shell shims are parsed to run via node directly),
+  refresh-plugin-tree-after-upgrade toggle
 
 ---
 
-## 🚀 Quick Start
+## 📥 Install
 
-1. **Configure your API Key**: create a `.env` file in your home directory (`C:\Users\<you>`):
+| Platform | Package | Notes |
+|---|---|---|
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.0-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.0_amd64.deb` |
+| **macOS (Apple Silicon)** | `artifacts/*.dmg` | Unsigned — right-click → Open on first launch |
+
+### 🚀 Quick start
+
+1. **Configure the API key** — create `.env` in your home directory:
 
    ```env
    DEEPSEEK_API_KEY=sk-xxxx
    ```
 
-2. **Launch the app**: double-click the desktop icon. The first launch needs internet — the app
-   downloads and installs the latest `@deepseek-ai/dsh` (fastest mirror chosen automatically) and
-   streams the progress into the black startup log; once done it starts the Web UI immediately.
-   Subsequent launches reuse the installed dsh.
+2. **Launch the app**. On first launch it downloads and installs `@deepseek-ai/dsh`
+   (fastest mirror auto-selected); progress is shown live in the "Startup log" window.
 
-   > 📍 dsh is installed into a `DeepSeek Harness` folder on the app's drive (auto-created),
-   > e.g. app under `H:\...` → dsh goes to `H:\DeepSeek Harness`.
-   > If auto-install fails (offline / no write permission at drive root), the app blocks startup and
-   > asks you to retry; you can also specify a dsh path manually in Settings (`dsh.cmd` / `dsh.exe` / `bin.js`).
+   > 📍 dsh location: Windows — `DeepSeek Harness` folder on the **drive root of the app**
+   > (same as the C# version, existing installs are reused); Linux/macOS — `~/.local/share/DeepSeek Harness`.
 
-3. **Install plugins**: click the "Plugins" button in the toolbar, pick from the DSH Market / npm list
-   and install; the service restarts automatically. If a plugin crashes the service, the app auto-blocks
-   and uninstalls it, shows the error log in a popup, and lets you choose "Restart" or "Restore plugin".
+3. **Install plugins** via "Tools → Plugin manager". Crashed plugins are blocked automatically and can be restored.
+
+### Entry points (native menu)
+
+- **Navigate**: Back `Alt+←` / Forward `Alt+→` / Reload `Ctrl+R` / Reconnect service `Ctrl+Shift+H` / Open in system browser `Ctrl+Shift+O`
+- **Tools**: Check for updates / Plugin manager `Ctrl+Shift+P` / Settings `Ctrl+,` / Startup log `Ctrl+L`
 
 ---
 
-## 🛠️ Building from Source
+## 🛠️ Build from source
 
-### Build machine requirements
+### Requirements
 
 | Item | Requirement | Notes |
 |---|---|---|
-| OS | Windows 10 / 11 | |
-| .NET SDK | **8.0+** | `dotnet` command must be available |
-| Node.js + npm | **18+** | `node` / `npm` commands must be available (to build the bundled node/npm runtime) |
-| Inno Setup | **7** | `iscc` command must be available (see note below) |
+| Rust | **1.77+** stable (MSVC toolchain on Windows) | via `rustup` |
+| Node.js + npm | **18+** | to generate the bundled runtime |
+| Tauri CLI | 2.x | `npm install -g @tauri-apps/cli` |
+| Inno Setup | 7 (Windows packaging only) | `iscc` on PATH or default install dir |
+| Linux extras | `libwebkit2gtk-4.1-dev libgtk-3-dev build-essential` | Ubuntu 22.04+ / Debian 12+ |
 
-> ⚠️ **Important: build scripts resolve tools via PATH**
->
-> All build scripts (`build.ps1` / `build-all.cmd` / `build-publish.cmd` / `prepare-runtime.cmd`)
-> no longer hard-code tool install paths — they **resolve `dotnet`, `node`, `npm`, `iscc` directly
-> from the system PATH**.
->
-> Before building, make sure these commands work directly in your terminal:
->
-> ```powershell
-> dotnet --version   # any version output is fine
-> node --version
-> npm --version
-> ```
->
-> 💡 **About Inno Setup**: `iscc` is **not** on PATH by default. The build scripts look it up on PATH
-> first, and if not found, automatically probe common install directories
-> (e.g., `C:\Program Files\Inno Setup 7\...`). To make it permanent, you can add the folder
-> containing `ISCC.exe` to PATH manually.
->
-> If a command is missing, the script prints a clear `xxx_NOT_FOUND` error instead of failing silently.
+### Windows one-click build
 
-### One-click build (recommended)
-
-```powershell
-# Full pipeline: prepare bundled node/npm runtime + self-contained publish + copy runtime + Inno Setup installer
-powershell -ExecutionPolicy Bypass -File scripts/build.ps1
-# or
+```cmd
 scripts\build-all.cmd
 ```
 
-Artifacts:
-- `artifacts/win-x64/DshDesktop.exe` — portable, run directly (includes bundled node/npm runtime)
-- `artifacts/DshDesktop-Setup-0.7.2.exe` — installer
+Pipeline: `prepare-runtime.ps1` (bundle node/npm/pnpm into `src-tauri/resources/runtime`)
+→ `tauri build --no-bundle` → Inno Setup → artifacts:
 
-Just for dev/debug:
+- `src-tauri/target/release/DshDesktop.exe` — portable build
+- `artifacts/DshDesktop-Setup-1.0.0-rust.exe` — installer
 
-```powershell
-dotnet build DshDesktop/DshDesktop.csproj
+### Linux .deb build
+
+```bash
+bash scripts/build-deb.sh
+# output: src-tauri/target/release/bundle/deb/*.deb
+```
+
+### macOS .dmg build
+
+```bash
+bash scripts/build-mac.sh
+# output: src-tauri/target/release/bundle/dmg/*.dmg (unsigned)
+```
+
+> 💡 Linux/macOS can also be built by GitHub Actions — see the three-platform matrix in
+> `.github/workflows/build.yml`.
+
+Development:
+
+```bash
+cd src-tauri && cargo tauri dev    # or cargo build / cargo test
 ```
 
 ---
 
-## 📂 Project Structure
+## 📂 Layout
 
 ```
-desktop/
-├── DshDesktop/                # WinUI 3 app (C# / .NET 8)
-│   ├── MainWindow.xaml        #   Main window: unified title bar + WebView2 + startup log/status
-│   ├── Services/
-│   │   ├── DshHostProcess.cs  #   dsh web child process (parses auth URL, crash detection, cleanup)
-│   │   ├── DshLocator.cs      #   dsh lookup (auto-install dir → manual path → PATH/npm global)
-│   │   ├── DshUpdater.cs      #   dsh install/upgrade (multi-source ping + npm + progress/cancel/timeout)
-│   │   ├── DshPaths.cs        #   Path constants (bundled node/npm & dsh install root)
-│   │   ├── PluginManager.cs   #   Plugin management (dsh plugin command)
-│   │   ├── PluginDialog.cs    #   Multi-source plugin marketplace dialog
-│   │   ├── AppSettings.cs     #   User settings (settings.json)
-│   │   └── SettingsDialog.cs  #   Settings dialog (manual dsh path)
-│   ├── Assets/                #   App icon
-│   └── runtime/               #   Bundled node/npm/pnpm runtime (generated at build time, no dsh)
-├── installer/setup.iss        # Inno Setup 7 install script
-├── scripts/
-│   ├── build-all.cmd          #   One-click full build (prepare-runtime → publish → runtime → installer)
-│   ├── build-publish.cmd      #   Publish + copy runtime + installer only (assumes runtime is ready)
-│   ├── build.ps1              #   One-click build (PowerShell, resolves tools from PATH)
-│   ├── prepare-runtime.cmd    #   Prepare bundled runtime (node + npm dist + pnpm, no dsh)
-│   ├── verify-artifacts.cmd   #   Verify artifacts (bundled node/npm + installer timestamps)
-│   └── generate-icon.ps1      #   Generate app icon
-└── artifacts/                 # Build output (win-x64/ publish dir + Setup exe)
+deepseek-harness-desktop-rust/
+├── src-tauri/                  # Rust / Tauri 2 app
+│   ├── src/                    #   main / state / commands / host / locator /
+│   │                           #   installer / registry / plugins / settings / paths / version
+│   ├── ui → ../ui              #   frontend pages (frontendDist)
+│   ├── capabilities/           #   Tauri permission config
+│   ├── icons/                  #   generated from AppIcon.png
+│   ├── resources/runtime/      #   bundled node/npm/pnpm (generated, gitignored)
+│   └── tauri.conf.json
+├── ui/                         # pages: index (status) / log / plugins / settings
+├── installer/setup.iss         # Inno Setup 7 script
+├── scripts/                    # build-all.cmd / prepare-runtime.{ps1,sh} / build-deb.sh / build-mac.sh
+├── .github/workflows/build.yml # 3-platform CI matrix
+└── legacy/                     # archived C#/WinUI 3 sources (v0.7.2)
 ```
-
-### Step-by-step build
-
-```powershell
-# 1. Prepare bundled runtime (copy node + bundle npm/pnpm; needs Node.js online; does NOT install dsh)
-scripts\prepare-runtime.cmd
-
-# 2. Build publish dir + installer (publish + copy runtime + Inno Setup)
-scripts\build-publish.cmd
-
-# 3. (Optional) Verify artifacts: print bundled node version, check installer & main exe timestamps
-scripts\verify-artifacts.cmd
-```
-
-> 📝 Note: the `runtime/` directory (Node.js + npm/pnpm) is generated by `prepare-runtime.cmd`.
-> It's a build artifact, excluded via `.gitignore`, and not committed to the repo. **dsh is NOT here** —
-> it is auto-installed by the app on the end user's machine on first launch into its own directory.
 
 ---
 
-## ❓ FAQ
+## 🔬 Technical notes
 
-- **"Auto-installing dsh…" fails on first launch**: internet is required. If every npm source
-  (official + China mirrors) is unreachable, or the install dir (`DeepSeek Harness` at the app drive
-  root) isn't writable, install fails. Check the network / move the app to a writable drive, then click
-  "Reload" in the toolbar to retry, or specify a dsh path manually in Settings.
-- **"dsh web authentication required"**: upgrade to v0.7.0 (older versions didn't capture dsh 0.1.2's
-  auth token). If it persists, an outdated dsh is installed — upgrade it via "Check for updates".
-- **Errors after updating dsh — previously you had to wipe the install dir and reinstall**:
-  fixed in v0.7.1. Older builds installed the npm `latest` tag, but dsh's `latest` can be *older*
-  than `next` while its dependency ranges resolve to a newer prerelease — leaving the CLI and the
-  plugin packages on mismatched versions (version skew). The app now installs the **exact** version
-  and updates via "stage → verify → swap"; it also self-checks at startup and reinstalls automatically
-  if the managed dsh install is found to be inconsistent.
-- **Should the plugin tree be refreshed after upgrading?** dsh's plugin tree lives in
-  `~/.dsh/profiles/web` and is managed by its own pnpm lockfile, so upgrading the CLI does not
-  re-resolve it. If plugin-related errors persist after an upgrade, make sure
-  **"Refresh plugin tree after upgrading dsh"** is enabled in Settings (it is on by default), or run
-  `pnpm update` in that directory manually (equivalent to `dsh plugin --profile web update`).
-- **Plugin install/restore needs internet**: `dsh plugin` installs via pnpm from the npm registry.
-- **A plugin crashed and got auto-blocked**: the app uninstalled the culprit and restarted with a safe
-  config. Go to the "Blocked" section of the Plugins dialog and choose "Restore" to retry.
-- **WebView2 Runtime missing**: install the Evergreen version from
-  <https://developer.microsoft.com/microsoft-edge/webview2/>.
-- **Blank UI / service issues**: the status bar shows a service log summary; you can also click
-  "Open in browser" to inspect the same address in your browser.
-
----
-
-## 🔬 Technical Notes
-
-- Target framework `net8.0-windows10.0.19041.0`, `WindowsPackageType=None` (unpackaged)
-- `WindowsAppSDKSelfContained=true` + `--self-contained true`: all runtimes ship with the app
-- Bundled runtime: `runtime/node.exe` (with VC++ libs) + `runtime/node_modules/npm` + pnpm
-  (**no dsh**)
-- dsh install root: `Path.GetPathRoot(app dir) + "DeepSeek Harness"`; npm installs to its
-  `node_modules/@deepseek-ai/dsh`; at startup the app looks here first and auto-installs `latest` if missing
-- dsh resolution order: **auto-install directory** → user-configured path → PATH / npm global
-- dsh install/upgrade: pings 4 npm sources (official / npmmirror / Tencent / Huawei) in parallel, picks
-  the lowest latency, installs with the bundled npm, with live progress, cancel, and a 15-min timeout
-- WebView2 uses its own user-data dir (`%LOCALAPPDATA%\DshDesktop\WebView2`), isolated from system Edge
-- New windows (`target=_blank`) open in the system default browser
+- Tauri 2 + system WebView (WebView2 / WKWebView / WebKitGTK)
+- The main webview navigates **directly** to the dsh web URL: dsh's auth cookie is `SameSite=Strict`
+  and is only sent in a top-level navigation context, so an iframe embedding would never authenticate —
+  hence the "native menu + direct navigation" architecture
+- Self-contained distribution: bundled node/npm/pnpm runtime (pnpm pinned to 11.x to avoid the
+  12.x size explosion); rustls is statically linked so the Linux build needs no system OpenSSL
+- dsh install root: Windows — `<drive root>\DeepSeek Harness` (compatible with C#-era installs);
+  Unix — `~/.local/share/DeepSeek Harness` (override with `DSH_INSTALL_ROOT`)
+- Settings/plugin-cache reuse the C#-era directories (`%APPDATA%\DshDesktop` / `~/.config/DshDesktop`)
+- Single-instance lock: a second launch focuses the existing window
+- dsh install/upgrade: 4-mirror latency race → exact version → staged install → verify → atomic swap → fallback-cache reset
 
 ---
 

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeek Harness</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="status-wrap">
+    <div class="spin" id="spinner"></div>
+    <div class="status-title" id="statusTitle">正在初始化…</div>
+    <div class="status-detail" id="statusDetail"></div>
+
+    <div class="actions" id="actions" style="display:none">
+      <button class="primary" id="btnReload">重新加载</button>
+      <button id="btnExternal">在系统浏览器中打开</button>
+    </div>
+
+    <div class="log-console" id="logConsole">
+      <div class="log-console-header">
+        <span>服务启动日志</span>
+        <button id="btnClearLog">清空</button>
+      </div>
+      <pre id="logText">等待服务输出…</pre>
+    </div>
+  </div>
+
+  <div class="status-footer">
+    <span id="footerLeft">DeepSeek Harness Desktop</span>
+    <span id="footerRight"></span>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const log = bindLogConsole(el('logText'));
+
+    function footerFrom(status) {
+      el('footerLeft').textContent =
+        `DeepSeek Harness Desktop v${status.app_version} · dsh ${status.dsh_version ?? '未安装'}`;
+      el('footerRight').textContent = `安装目录：${status.install_root}`;
+    }
+
+    async function init() {
+      const status = await call('get_status');
+      log.replaceAll(status.log);
+      renderStatus({
+        spinner: el('spinner'),
+        title: el('statusTitle'),
+        detail: el('statusDetail'),
+        actions: el('actions'),
+      }, {
+        phase: status.phase,
+        title: status.phase === 'running' ? '服务运行中' : status.phase,
+      });
+      footerFrom(status);
+
+      await listen('log', (e) => log.append(e.payload.line));
+      await listen('status', (e) => {
+        renderStatus({
+          spinner: el('spinner'),
+          title: el('statusTitle'),
+          detail: el('statusDetail'),
+          actions: el('actions'),
+        }, e.payload);
+        if (e.payload.title) log.append(`[状态] ${e.payload.title}`);
+      });
+      await listen('service-url', () => { /* 导航由核心完成 */ });
+      await listen('crash', (e) => {
+        log.append(`[崩溃处理] 已自动屏蔽并卸载：${(e.payload.disabled || []).join(', ') || '（无）'}`);
+      });
+
+      el('btnReload').addEventListener('click', () => call('restart_service'));
+      el('btnExternal').addEventListener('click', () => call('open_service_in_browser'));
+      el('btnClearLog').addEventListener('click', async () => {
+        await call('clear_log');
+        log.clear();
+      });
+
+      // 页面就绪 → 触发启动流程（重复触发由核心串行化挡住）
+      call('startup');
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

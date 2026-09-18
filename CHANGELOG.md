@@ -5,6 +5,46 @@
 
 ---
 
+## [1.0.0] — 2026-09-19
+
+### 🇬🇧 English
+
+🔨 **Full rewrite: C#/WinUI 3 → Rust + Tauri 2, now cross-platform.**
+
+- The entire desktop shell is reimplemented in Rust (~2.6k lines): process management, dsh locator,
+  staged installer/upgrader, multi-mirror npm racing, plugin marketplace, crash self-healing — feature
+  parity with 0.7.2.
+- **Cross-platform**: Windows (Inno Setup installer), Linux `.deb` (Ubuntu 22.04+ / Debian 12+ /
+  UOS 1070 / deepin 23), macOS `.dmg` (unsigned). CI matrix in `.github/workflows/build.yml`.
+- **Architecture note discovered by testing**: dsh's web auth cookie is `SameSite=Strict`, which an
+  iframe embedding can never carry — the main webview therefore navigates directly to the service URL
+  and the toolbar moved to a native menu (Navigate / Tools) plus dedicated log / plugins / settings windows.
+- Native Rust binary: no .NET runtime bundled (install much smaller); bundled runtime is now
+  node + npm + pnpm@11 only; settings/plugin caches reuse the C#-era directories, so user data carries over.
+- Single-instance lock; process-tree cleanup verified on exit.
+- 31 unit tests (semver compare, staged-install verification & skew detection, shim parsing,
+  fallback-cache symlink-safe deletion, crash detection, plugin source parsing).
+- Old C# sources archived under `legacy/`.
+
+### 🇨🇳 中文
+
+🔨 **整体重写：C#/WinUI 3 → Rust + Tauri 2，跨平台。**
+
+- 桌面壳全部用 Rust 重新实现（约 2600 行）：进程管理、dsh 定位、暂存安装/升级、npm 多源测速、
+  插件市场、崩溃自愈 —— 与 0.7.2 功能对齐。
+- **跨平台**：Windows（Inno Setup 安装器）、Linux `.deb`（Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23）、
+  macOS `.dmg`（未签名）。三平台 CI 矩阵见 `.github/workflows/build.yml`。
+- **实测发现的架构约束**：dsh web 的鉴权 cookie 为 `SameSite=Strict`，iframe 嵌入永远带不上 ——
+  主 WebView 改为直接导航到服务地址，工具栏功能移入原生菜单（导航 / 工具）+ 独立的日志/插件/设置窗口。
+- Rust 原生二进制：不再捆绑 .NET 运行时（安装体积大幅缩小）；捆绑运行时只含 node + npm + pnpm@11；
+  设置与插件缓存沿用 C# 版目录，用户数据无缝继承。
+- 单实例锁；退出时进程树清理已实测验证。
+- 31 个单元测试（semver 比较、暂存安装校验与版本偏斜检测、shim 解析、回退缓存符号链接安全删除、
+  崩溃检测、插件来源解析）。
+- 旧 C# 源码归档至 `legacy/`。
+
+---
+
 ## [0.7.2] — 2026-09-12
 
 ### 🇬🇧 English

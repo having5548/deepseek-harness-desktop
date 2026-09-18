@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>设置 — DeepSeek Harness</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="field">
+      <label for="dshPath">dsh 可执行文件路径</label>
+      <input type="text" id="dshPath" placeholder="留空则自动检测（自动安装目录或 PATH）" />
+      <div class="btns">
+        <button id="btnBrowse">浏览…</button>
+        <button id="btnDetect">自动检测</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="note" id="versionNote">当前 dsh 版本：加载中…</span>
+      <span class="note" id="installNote"></span>
+    </div>
+
+    <div class="field">
+      <label class="toggle" id="refreshToggle" style="align-self:flex-start">
+        <input type="checkbox" id="refreshProfile" style="width:auto" />
+        升级 dsh 后刷新插件树
+      </label>
+      <span class="note">
+        插件树由 ~/.dsh/profiles/web 下的 pnpm 独立管理，升级 dsh 不会自动重解析。
+        开启后，每次升级完成会在该目录执行一次 pnpm update，避免插件与 CLI 版本不匹配。
+      </span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="row" style="justify-content:flex-end">
+      <span class="note" id="saveNote" style="margin-right:auto"></span>
+      <button class="primary" id="btnSave">保存（并重启服务）</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let settings = null;
+
+    async function init() {
+      settings = await call('get_settings');
+      el('dshPath').value = settings.DshPath || '';
+      el('refreshProfile').checked = !!settings.RefreshProfileAfterUpdate;
+
+      const status = await call('get_status');
+      el('versionNote').textContent = `当前 dsh 版本：${status.dsh_version ?? '未安装'}`;
+      el('installNote').textContent =
+        `dsh 是 DeepSeek Harness 命令行入口。首次启动会自动安装到：${status.install_root}\n` +
+        `也可以手动指定已存在的 dsh 路径（npm install -g @deepseek-ai/dsh）。`;
+
+      el('btnBrowse').addEventListener('click', async () => {
+        const path = await call('pick_dsh_file');
+        if (path) el('dshPath').value = path;
+      });
+      el('btnDetect').addEventListener('click', () => { el('dshPath').value = ''; });
+
+      el('btnSave').addEventListener('click', async () => {
+        settings.DshPath = el('dshPath').value.trim();
+        settings.RefreshProfileAfterUpdate = el('refreshProfile').checked;
+        el('btnSave').disabled = true;
+        el('saveNote').textContent = '已保存，正在重启服务…';
+        try {
+          await call('save_settings', { settings });
+          setTimeout(() => { el('saveNote').textContent = '已保存。'; el('btnSave').disabled = false; }, 800);
+        } catch (e) {
+          el('saveNote').textContent = `保存失败：${e}`;
+          el('btnSave').disabled = false;
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

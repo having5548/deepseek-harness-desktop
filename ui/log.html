@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>启动日志 — DeepSeek Harness</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="status-wrap" style="justify-content: flex-start;">
+    <div class="log-console expanded" id="logConsole">
+      <div class="log-console-header">
+        <span>服务 / 安装 / 升级日志</span>
+        <button id="btnClearLog">清空</button>
+      </div>
+      <pre id="logText">加载中…</pre>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const log = bindLogConsole(el('logText'));
+
+    async function init() {
+      const status = await call('get_status');
+      log.replaceAll(status.log);
+
+      await listen('log', (e) => log.append(e.payload.line));
+      await listen('status', (e) => {
+        if (e.payload.title) log.append(`[状态] ${e.payload.title} ${e.payload.detail || ''}`);
+      });
+
+      el('btnClearLog').addEventListener('click', async () => {
+        await call('clear_log');
+        log.clear();
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

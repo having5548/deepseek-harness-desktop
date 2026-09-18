@@ -1,12 +1,12 @@
-﻿# 准备捆绑运行时（Rust/Tauri 版）：只捆绑 Node 运行时 + npm 发行版 + pnpm + VC++ 运行库。
+# 准备捆绑运行时：只捆绑 Node 运行时 + npm 发行版 + pnpm + VC++ 运行库。
 # 注意：dsh 不再捆绑，由应用首次启动时用自带的 node+npm 自动安装。
 # 用法: powershell -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1
 $ErrorActionPreference = "Stop"
 
-$scriptsDir = $PSScriptRoot
-$rootDir = Split-Path -Parent $scriptsDir
-$rt = Join-Path $rootDir "src-tauri\resources\runtime"
-$logFile = Join-Path $rootDir "prepare-runtime.log"
+$scriptsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$desktopDir = Split-Path -Parent $scriptsDir
+$rt = Join-Path $desktopDir "DshDesktop\runtime"
+$logFile = Join-Path $desktopDir "prepare-runtime.log"
 
 function Log($msg) {
     $line = "[{0}] {1}" -f (Get-Date -Format "HH:mm:ss"), $msg
@@ -18,8 +18,11 @@ New-Item -ItemType Directory -Force -Path $rt | Out-Null
 Set-Content -Path $logFile -Value "prepare-runtime start" -Encoding utf8
 
 # 1. 安装 pnpm 到捆绑运行时（供 dsh plugin 在运行时使用）
-#    固定 pnpm 11.x：pnpm 12+ 自带 "pn" 运行时，会在包内塞入 8 份各约 42MB 的重复二进制，
-#    使捆绑运行时凭空膨胀约 380MB。11.x 仅约 19MB，且为 dsh plugin 实测可用的版本。
+#    固定 pnpm 11.x：pnpm 12+ 自带 "pn" 运行时，会在包内塞入 8 份各约 42MB 的重复二进制
+#    （pn / pn.exe / pnpm / pnpm.exe / pnpx / pnpx.exe / pnx / pnx.exe），
+#    使捆绑运行时从约 19MB 膨胀到约 398MB、安装包凭空多出约 105MB。
+#    11.x 仅约 19MB，且为 dsh plugin 实测可用的版本。
+#    先清掉旧版本残留（含其 bin shim），避免降级后留下孤儿文件。
 $pnpmDir = Join-Path $rt "node_modules\pnpm"
 if (Test-Path $pnpmDir) { Remove-Item $pnpmDir -Recurse -Force; Log "removed existing pnpm (clean install)" }
 foreach ($shim in @("pn","pn.cmd","pn.ps1","pnx","pnx.cmd","pnx.ps1","pnpx","pnpx.cmd","pnpx.ps1")) {

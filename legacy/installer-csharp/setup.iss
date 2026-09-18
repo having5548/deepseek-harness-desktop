@@ -1,15 +1,14 @@
-; DeepSeek Harness 桌面客户端（Rust / Tauri 版）安装脚本 (Inno Setup 7)
-; 用法: iscc.exe installer\setup.iss
-;   （先运行 scripts\build-all.cmd 完成编译，产物在 src-tauri\target\release）
+; DeepSeek Harness 桌面客户端安装脚本 (Inno Setup 7)
+; 用法: iscc.exe setup.iss
 #define MyAppName "DeepSeek Harness Desktop"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "0.7.2"
 #define MyAppPublisher "DeepSeek AI"
 #define MyAppExeName "DshDesktop.exe"
-#define SourceDir "..\src-tauri\target\release"
+#define SourceDir "..\artifacts\win-x64"
 #define OutputDir "..\artifacts"
 
 [Setup]
-AppId={{7A3E5C81-2B4D-4F6A-8E29-C1D0B9F4A617}
+AppId={{B4E1D6C2-9A3F-4F7E-8B5A-2C4D9E1F6A30}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -19,11 +18,11 @@ DisableProgramGroupPage=yes
 ; 无需管理员权限，安装到用户 Program Files（无 UAC 弹窗）
 PrivilegesRequired=lowest
 OutputDir={#OutputDir}
-OutputBaseFilename=DshDesktop-Setup-{#MyAppVersion}-rust
+OutputBaseFilename=DshDesktop-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-SetupIconFile=..\src-tauri\icons\icon.ico
+SetupIconFile=..\DshDesktop\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 自包含 x64 应用，仅支持 64 位系统
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -38,10 +37,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; 主程序 + WebView2Loader + resources\（捆绑 node/npm/pnpm 运行时）整体打包
-Source: "{#SourceDir}\DshDesktop.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#SourceDir}\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 排除运行时产生的 WebView2 用户数据缓存（本地开发残留，不应随安装包分发）
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "DshDesktop.exe.WebView2"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

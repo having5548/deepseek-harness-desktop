@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>插件管理 — DeepSeek Harness</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <!-- 已安装 -->
+    <div class="section">
+      <h2>已安装插件</h2>
+      <div class="status-line" id="installedStatus">加载中…</div>
+      <div id="installedList"></div>
+    </div>
+
+    <!-- 来源与搜索 -->
+    <div class="section">
+      <h2>从插件来源获取</h2>
+      <div class="row" style="margin-bottom:8px">
+        <select id="modeSelect" style="width:180px">
+          <option value="multi">多来源叠加（推荐）</option>
+          <option value="single">单来源</option>
+        </select>
+        <select id="singleSource" style="width:170px; display:none"></select>
+        <div class="row" id="multiSources"></div>
+      </div>
+      <div class="row">
+        <input type="text" id="searchBox" placeholder="搜索插件名（支持正则）" style="width:240px" />
+        <button id="btnRefresh">刷新列表</button>
+      </div>
+      <div class="status-line" id="remoteStatus" style="margin-top:8px">加载中…</div>
+      <div class="hint">安装后自动重启服务生效；若插件导致服务崩溃会被自动屏蔽。</div>
+      <div id="remoteList"></div>
+    </div>
+
+    <!-- 已屏蔽 -->
+    <div class="section">
+      <h2>已屏蔽（因加载失败被自动禁用）</h2>
+      <div class="status-line" id="disabledStatus">…</div>
+      <div id="disabledList"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const BUILTIN = new Set();
+    let settings = null;
+    let currentPlugins = [];
+    let listHeader = '';
+    let loading = false;
+
+    function statusLine(id, text) { el(id).textContent = text; }
+
+    // ── 已安装 / 已屏蔽 ─────────────────────────────
+    async function renderInstalled() {
+      const installed = await call('plugins_installed');
+      if (!installed.length) { statusLine('installedStatus', '无'); el('installedList').innerHTML = ''; return; }
+      statusLine('installedStatus', `${installed.length} 个（含内置模板 bundle）`);
+      const list = el('installedList');
+      list.innerHTML = '';
+      for (const pkg of installed) {
+        const isBuiltin = BUILTIN.has(pkg);
+        const card = document.createElement('div');
+        card.className = 'card';
+        const left = document.createElement('div');
+        left.className = 'grow';
+        left.innerHTML = `<div class="name">${esc(pkg)}</div>`;
+        const btns = document.createElement('div');
+        btns.className = 'btns';
+        if (isBuiltin) {
+          const badge = document.createElement('span');
+          badge.className = 'badge builtin';
+          badge.textContent = '内置';
+          btns.appendChild(badge);
+        }
+        const btn = document.createElement('button');
+        btn.className = 'small';
+        btn.textContent = '卸载';
+        btn.disabled = isBuiltin;
+        btn.addEventListener('click', () => pluginAction(btn, 'plugin_remove', { package_name: pkg }, '卸载中…', '已卸载 ✓', `卸载 ${pkg} 失败`, () => renderInstalled()));
+        btns.appendChild(btn);
+        card.appendChild(left);
+        card.appendChild(btns);
+        list.appendChild(card);
+      }
+    }
+
+    function renderDisabled() {
+      const disabled = (settings?.DisabledPlugins || []).filter(Boolean);
+      if (!disabled.length) { statusLine('disabledStatus', '无'); el('disabledList').innerHTML = ''; return; }
+      statusLine('disabledStatus', `${disabled.length} 个插件被屏蔽`);
+      const list = el('disabledList');
+      list.innerHTML = '';
+      for (const pkg of disabled) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const left = document.createElement('div');
+        left.className = 'grow';
+        left.innerHTML = `<div class="name">${esc(pkg)}</div>`;
+        const btns = document.createElement('div');
+        btns.className = 'btns';
+        const btn = document.createElement('button');
+        btn.className = 'small';
+        btn.textContent = '恢复';
+        btn.addEventListener('click', () => pluginAction(btn, 'plugin_restore', { package_name: pkg }, '恢复中…', '已恢复 ✓', `恢复 ${pkg} 失败`, async () => { settings = await call('get_settings'); renderDisabled(); }));
+        btns.appendChild(btn);
+        card.appendChild(left);
+        card.appendChild(btns);
+        list.appendChild(card);
+      }
+    }
+
+    // ── 来源控件 ───────────────────────────────────
+    async function buildSourceControls(sources) {
+      const single = el('singleSource');
+      const multi = el('multiSources');
+      single.innerHTML = '';
+      multi.innerHTML = '';
+      for (const s of sources) {
+        const opt = document.createElement('option');
+        opt.value = s.id; opt.textContent = s.name;
+        single.appendChild(opt);
+
+        const t = document.createElement('span');
+        t.className = 'toggle' + (settings.EnabledPluginSources.includes(s.id) ? ' on' : '');
+        t.innerHTML = `<span class="dot"></span>${esc(s.name)}`;
+        t.addEventListener('click', async () => {
+          const id = s.id;
+          const on = !settings.EnabledPluginSources.includes(id);
+          if (on) settings.EnabledPluginSources.push(id);
+          else settings.EnabledPluginSources = settings.EnabledPluginSources.filter((x) => x !== id);
+          t.classList.toggle('on', on);
+          await call('save_settings_quiet', { settings });
+          loadRemote();
+        });
+        multi.appendChild(t);
+      }
+      single.value = settings.SelectedPluginSource;
+      single.addEventListener('change', async () => {
+        settings.SelectedPluginSource = single.value;
+        await call('save_settings_quiet', { settings });
+        loadRemote();
+      });
+      el('modeSelect').value = settings.PluginSourceMode === 'single' ? 'single' : 'multi';
+      el('modeSelect').addEventListener('change', async () => {
+        settings.PluginSourceMode = el('modeSelect').value;
+        await call('save_settings_quiet', { settings });
+        updateSourceVisibility();
+        loadRemote();
+      });
+      updateSourceVisibility();
+    }
+
+    function updateSourceVisibility() {
+      const isMulti = settings.PluginSourceMode !== 'single';
+      el('singleSource').style.display = isMulti ? 'none' : '';
+      el('multiSources').style.display = isMulti ? '' : 'none';
+    }
+
+    // ── 远程列表 ───────────────────────────────────
+    async function loadRemote() {
+      if (loading) return;
+      loading = true;
+      el('btnRefresh').disabled = true;
+      statusLine('remoteStatus', '正在获取插件…');
+      try {
+        const resp = await call('plugins_fetch');
+        currentPlugins = resp.plugins;
+        if (resp.from_cache) {
+          listHeader = `所有插件源均获取失败，已显示本地缓存（保存于 ${resp.cache_saved_at}）。`;
+        } else {
+          const failedNote = resp.failed_sources.length ? `（获取失败：${resp.failed_sources.join('、')}）` : '';
+          listHeader = `共 ${resp.plugins.length} 个插件，来自：${resp.source_names.join('、')}${failedNote}`;
+        }
+      } catch (e) {
+        listHeader = `获取插件出错：${e}`;
+      }
+      loading = false;
+      el('btnRefresh').disabled = false;
+      applySearchFilter();
+    }
+
+    function applySearchFilter() {
+      const pattern = el('searchBox').value.trim();
+      let list = currentPlugins;
+      let invalid = false;
+      if (pattern) {
+        try {
+          const re = new RegExp(pattern, 'i');
+          list = list.filter((p) => re.test(p.packageName));
+        } catch {
+          invalid = true;
+        }
+      }
+      const container = el('remoteList');
+      container.innerHTML = '';
+      for (const p of list) container.appendChild(remoteRow(p));
+      statusLine(
+        'remoteStatus',
+        listHeader + (invalid ? ' · 正则无效，已显示全部' : pattern ? ` · 搜索命中 ${list.length} 个` : '')
+      );
+    }
+
+    function remoteRow(p) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const left = document.createElement('div');
+      left.className = 'grow';
+      const metaParts = [];
+      if (p.Sources?.length) metaParts.push(`来源：${p.Sources.join('、')}`);
+      if (p.RepoFullName) metaParts.push(p.RepoFullName);
+      if (p.Stars > 0) metaParts.push(`⭐${p.Stars}`);
+      if (p.Score > 0) metaParts.push(`实用分 ${p.Score}`);
+      if (p.NeedsConfig) metaParts.push('需配置');
+      left.innerHTML =
+        `<div class="name">${esc(p.PackageName)}</div>` +
+        `<div class="meta">${esc(metaParts.join(' · '))}</div>` +
+        `<div class="desc">${esc(p.Description || '（无描述）')}</div>`;
+
+      const btns = document.createElement('div');
+      btns.className = 'btns';
+      if (p.RepoUrl) {
+        const gh = document.createElement('button');
+        gh.className = 'small';
+        gh.textContent = 'GitHub';
+        gh.addEventListener('click', () => call('open_external', { url: p.RepoUrl }));
+        btns.appendChild(gh);
+      }
+      const install = document.createElement('button');
+      install.className = 'small primary';
+      install.textContent = '安装';
+      install.addEventListener('click', () =>
+        pluginAction(install, 'plugin_install', { install_spec: p.InstallSpec, package_name: p.PackageName },
+          '安装中…', '已安装 ✓', `安装 ${p.PackageName} 失败`,
+          async () => { settings = await call('get_settings'); renderDisabled(); renderInstalled(); })
+      );
+      btns.appendChild(install);
+
+      card.appendChild(left);
+      card.appendChild(btns);
+      return card;
+    }
+
+    // ── 通用动作 ───────────────────────────────────
+    async function pluginAction(btn, cmd, args, busyText, doneText, failTitle, after) {
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = busyText;
+      try {
+        const result = await call(cmd, args);
+        if (result.success) {
+          btn.textContent = doneText;
+          await after();
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+        } else {
+          statusLine('remoteStatus', `${failTitle}：${firstLine(result.output) || '（无输出）'}`);
+          logTail(result.output);
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      } catch (e) {
+        statusLine('remoteStatus', `出错：${e}`);
+        btn.textContent = orig;
+        btn.disabled = false;
+      }
+    }
+
+    function firstLine(text) {
+      return (text || '').split('\n').find((l) => l.trim()) || '';
+    }
+    function logTail(text) {
+      console.log('--- dsh plugin 输出 ---\n' + text);
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    async function init() {
+      BUILTIN.add(...(await call('builtin_bundles')));
+      settings = await call('get_settings');
+      await buildSourceControls(await call('plugin_sources'));
+      await renderInstalled();
+      renderDisabled();
+      await loadRemote();
+
+      el('btnRefresh').addEventListener('click', loadRemote);
+      el('searchBox').addEventListener('input', applySearchFilter);
+      // 插件可能因崩溃自愈等被改动：窗口聚焦时刷新列表
+      window.addEventListener('focus', async () => {
+        settings = await call('get_settings');
+        renderDisabled();
+        renderInstalled();
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
