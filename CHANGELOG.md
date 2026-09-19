@@ -5,6 +5,52 @@
 
 ---
 
+## [1.0.3] — 2026-09-19
+
+### 🇬🇧 English
+
+🔗 **Links open in your browser again · 🎛️ the top bar is now a modern floating toolbar**
+
+- **Fixed: clicking a link in the dsh page did nothing.** The port never wired up the equivalent of
+  WebView2's `NewWindowRequested`, so `target="_blank"` / `window.open` links were silently dropped —
+  neither the system browser nor a new window opened. The main window now intercepts both
+  `on_new_window` and `on_navigation`: external http(s) URLs are handed to the system browser and
+  blocked in-app, while the loopback dsh service and local pages keep navigating normally (helper
+  windows share the same handling).
+- **The native menu bar is gone, replaced by a modern floating toolbar.** The OS-drawn 导航 / 工具 menu
+  (which cannot be restyled) has been removed. The app's own toolbar is now injected into the page as a
+  frosted-glass pill pinned to the top centre: back / forward / reload · reconnect / open in browser ·
+  plugins / settings / logs · check for updates. Click the chevron to collapse it into a small handle
+  when it is in the way. It follows the system light / dark appearance.
+- Keyboard shortcuts are preserved (Alt+←/→, Ctrl+R, Ctrl+Shift+H/O/P, Ctrl+, , Ctrl+L), now handled in-page.
+- **Why injected instead of an iframe shell:** dsh's auth cookie is `SameSite=Strict`, so an iframe can
+  never carry it — the main window has to navigate to the service URL directly.
+- **How the toolbar talks to the app without IPC:** remote pages can't reach Tauri's IPC (capabilities
+  grant local origins only), so buttons signal through a reserved sentinel host
+  (`https://dsh-desktop.invalid/<action>`), which Rust intercepts and turns into the real action.
+- Version bumped to **1.0.3**.
+
+### 🇨🇳 中文
+
+🔗 **链接又能用系统浏览器打开了 · 🎛️ 顶部换成现代悬浮工具栏**
+
+- **修复：dsh 页面里的链接点了没反应。** 移植时漏掉了 WebView2 `NewWindowRequested` 的等价实现，
+  于是 `target="_blank"` / `window.open` 的链接被静默丢弃 —— 既不开系统浏览器，也不开新窗口。
+  主窗口现在同时拦截 `on_new_window` 与 `on_navigation`：外部 http(s) 一律交给系统浏览器并在应用内
+  阻止，回环 dsh 服务与本地页面照常导航；日志/插件/设置窗口共用同一套处理。
+- **原生菜单栏移除，换成现代悬浮工具栏。** 系统绘制的「导航 / 工具」菜单无法改样式，已删除；应用自己的
+  工具栏改为注入到页面中、固定在顶部中央的毛玻璃胶囊：后退/前进/刷新 · 重连/浏览器打开 ·
+  插件/设置/日志 · 检查更新。挡路时点右侧箭头可收成一个小手柄；跟随系统深/浅色。
+- 快捷键保留（Alt+←/→、Ctrl+R、Ctrl+Shift+H/O/P、Ctrl+,、Ctrl+L），改由页面侧接管。
+- **为什么用注入而不是 iframe 外壳：** dsh 的鉴权 cookie 是 `SameSite=Strict`，iframe 永远带不上，
+  主窗口必须直接导航到服务地址。
+- **工具栏怎么在不使用 IPC 的情况下与应用通信：** 远端页面拿不到 Tauri IPC（capability 只授权本地
+  来源），所以按钮通过保留的哨兵主机名 `https://dsh-desktop.invalid/<动作>` 发请求，由 Rust 侧拦截并
+  转成真正的动作。
+- 版本号升至 **1.0.3**。
+
+---
+
 ## [1.0.2] — 2026-09-19
 
 ### 🇬🇧 English

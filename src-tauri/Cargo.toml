@@ -1,6 +1,6 @@
 [package]
 name = "dshdesktop"
-version = "1.0.2"
+version = "1.0.3"
 description = "DeepSeek Harness 桌面客户端（Rust / Tauri 版）"
 edition = "2021"
 rust-version = "1.77"

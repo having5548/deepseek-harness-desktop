@@ -7,7 +7,7 @@
 > 把 DeepSeek Harness 装进一个原生窗口 —— **装完即用，像用普通软件一样简单**。
 > v1.0.2 起由 C#/WinUI 3 完全重写为 **Rust + Tauri 2**，跨 Windows / macOS / Linux。
 
-![版本](https://img.shields.io/badge/版本-1.0.2-2b6cb0)
+![版本](https://img.shields.io/badge/版本-1.0.3-2b6cb0)
 ![框架](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![平台](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%2C%20dsh%20首次启动自动安装-4ea04e)
@@ -25,7 +25,7 @@
 |---|---|
 | 🪄 **零 CLI 前置** | 安装包自带 Node.js 运行时；首次启动自动联网安装最新版 dsh（多源测速选最快），**无需手动装任何东西** |
 | 🧩 **安装即自动绑定** | dsh 自动装到独立目录，装完即被定位并复用，升级/重装应用不受影响 |
-| 🖥️ **原生体验** | Tauri 原生窗口 + 系统菜单栏（导航 / 工具），WebView 渲染服务界面 |
+| 🖥️ **原生体验** | Tauri 原生窗口 + 顶部悬浮工具栏（毛玻璃胶囊，可收起），WebView 渲染服务界面 |
 | 🔌 **插件市场** | 多来源（DSH Market / npm / npmmirror）发现并一键安装插件，装完服务自动重启 |
 | 🩹 **崩溃自愈** | 插件搞崩服务？自动屏蔽 + 卸载 + 安全配置重启，弹窗展示日志，可在插件管理中恢复 |
 | 🪶 **轻量** | Rust 原生二进制，不再捆绑 ~200MB 的 .NET 运行时 |
@@ -50,8 +50,8 @@
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.2-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.2_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.3-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.3_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | 未签名，首次打开需右键 → 打开 |
 
 > 免安装版（Windows）：`src-tauri/target/release/DshDesktop.exe`（需与 `resources/` 目录放在一起）。
@@ -71,12 +71,17 @@
    > （与 C# 版一致，旧安装直接复用）；Linux/macOS 在 `~/.local/share/DeepSeek Harness`。
    > 设置中可手动指定 dsh 路径作为备用方案。
 
-3. **安装插件**：菜单「工具 → 插件管理」，从多来源列表一键安装；崩溃自动屏蔽，可恢复。
+3. **安装插件**：点顶部工具栏的「插件管理」图标，从多来源列表一键安装；崩溃自动屏蔽，可恢复。
 
-### 使用入口（原生菜单）
+### 使用入口（顶部悬浮工具栏）
 
-- **导航**：后退 `Alt+←` / 前进 `Alt+→` / 重新加载 `Ctrl+R` / 重新连接服务 `Ctrl+Shift+H` / 在系统浏览器中打开 `Ctrl+Shift+O`
-- **工具**：检查更新 / 插件管理 `Ctrl+Shift+P` / 设置 `Ctrl+,` / 启动日志 `Ctrl+L`
+窗口顶部中央的毛玻璃工具栏，从左到右依次是：
+
+- **导航**：后退 / 前进 / 刷新（`Alt+←`、`Alt+→`、`Ctrl+R`）
+- **服务**：重新连接服务 / 在系统浏览器中打开（`Ctrl+Shift+H`、`Ctrl+Shift+O`）
+- **工具**：插件管理 / 设置 / 启动日志 / 检查更新（`Ctrl+Shift+P`、`Ctrl+,`、`Ctrl+L`）
+
+点工具栏右侧的箭头可把它收成一个小手柄（不挡页面），再点一下展开。
 
 ---
 
@@ -102,7 +107,7 @@ scripts\build-all.cmd
 → `tauri build --no-bundle` → Inno Setup 打包 → 产物：
 
 - `src-tauri/target/release/DshDesktop.exe` — 免安装直接运行
-- `artifacts/DshDesktop-Setup-1.0.2-rust.exe` — 安装器
+- `artifacts/DshDesktop-Setup-1.0.3-rust.exe` — 安装器
 
 ### Linux 构建 .deb（Ubuntu / Debian / UOS）
 

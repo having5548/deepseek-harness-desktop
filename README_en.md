@@ -7,7 +7,7 @@
 > Put DeepSeek Harness in a native window — **install and use it like any ordinary app**.
 > Since v1.0.2 the app is fully rewritten from C#/WinUI 3 to **Rust + Tauri 2**, cross-platform on Windows / macOS / Linux.
 
-![Version](https://img.shields.io/badge/version-1.0.2-2b6cb0)
+![Version](https://img.shields.io/badge/version-1.0.3-2b6cb0)
 ![Framework](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![Runtime](https://img.shields.io/badge/runtime-bundled%20Node.js%2C%20dsh%20auto--install%20on%20first%20launch-4ea04e)
@@ -25,7 +25,7 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 |---|---|
 | 🪄 **Zero CLI prerequisite** | The installer bundles a Node.js runtime; on first launch the latest dsh is installed automatically (fastest-mirror detection) — **nothing to set up manually** |
 | 🧩 **Auto-binding** | dsh is installed into a dedicated folder, located and reused automatically across app upgrades/reinstalls |
-| 🖥️ **Native experience** | Tauri native window + system menu bar (Navigate / Tools), WebView renders the service UI |
+| 🖥️ **Native experience** | Tauri native window + floating top toolbar (frosted-glass pill, collapsible), WebView renders the service UI |
 | 🔌 **Plugin marketplace** | Discover and one-click install plugins from multiple sources (DSH Market / npm / npmmirror); service restarts automatically |
 | 🩹 **Crash self-healing** | A broken plugin crashes the service? It gets blocked + uninstalled automatically, the service restarts safely, and you can restore it from the plugin manager |
 | 🪶 **Lightweight** | Native Rust binary — no ~200MB .NET runtime bundled anymore |
@@ -51,8 +51,8 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 
 | Platform | Package | Notes |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.2-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.2_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.3-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.3_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | Unsigned — right-click → Open on first launch |
 
 ### 🚀 Quick start
@@ -69,12 +69,17 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
    > 📍 dsh location: Windows — `DeepSeek Harness` folder on the **drive root of the app**
    > (same as the C# version, existing installs are reused); Linux/macOS — `~/.local/share/DeepSeek Harness`.
 
-3. **Install plugins** via "Tools → Plugin manager". Crashed plugins are blocked automatically and can be restored.
+3. **Install plugins** from the toolbar's plugin-manager button. Crashed plugins are blocked automatically and can be restored.
 
-### Entry points (native menu)
+### Entry points (floating top toolbar)
 
-- **Navigate**: Back `Alt+←` / Forward `Alt+→` / Reload `Ctrl+R` / Reconnect service `Ctrl+Shift+H` / Open in system browser `Ctrl+Shift+O`
-- **Tools**: Check for updates / Plugin manager `Ctrl+Shift+P` / Settings `Ctrl+,` / Startup log `Ctrl+L`
+A frosted-glass toolbar pinned to the top centre of the window, left to right:
+
+- **Navigate**: Back / Forward / Reload (`Alt+←`, `Alt+→`, `Ctrl+R`)
+- **Service**: Reconnect service / Open in system browser (`Ctrl+Shift+H`, `Ctrl+Shift+O`)
+- **Tools**: Plugin manager / Settings / Startup log / Check for updates (`Ctrl+Shift+P`, `Ctrl+,`, `Ctrl+L`)
+
+Click the chevron on the right to collapse it into a small handle that stays out of the way; click again to expand.
 
 ---
 
@@ -100,7 +105,7 @@ Pipeline: `prepare-runtime.ps1` (bundle node/npm/pnpm into `src-tauri/resources/
 → `tauri build --no-bundle` → Inno Setup → artifacts:
 
 - `src-tauri/target/release/DshDesktop.exe` — portable build
-- `artifacts/DshDesktop-Setup-1.0.2-rust.exe` — installer
+- `artifacts/DshDesktop-Setup-1.0.3-rust.exe` — installer
 
 ### Linux .deb build
 
