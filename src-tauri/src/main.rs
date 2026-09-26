@@ -116,7 +116,14 @@ fn attach_link_handlers(
             if is_local_page(url) {
                 return true;
             }
-            open_in_system_browser(&nav_app, url);
+            // 兜底的外链路径：页面里的普通锚点（dsh 的聊天输出就是这种，渲染时
+            // 不带 target="_blank"）点击后是一次顶层导航，只会走到这里。
+            // 不能在 webview 事件线程上同步启动外部程序（opener 插件内部可能要回
+            // 主线程，两边互等），所以丢到独立线程；页面侧 toolbar.js 还会把这类
+            // 点击改写成 window.open 走 on_new_window，两条路都能到系统浏览器。
+            let app = nav_app.clone();
+            let target = url.clone();
+            std::thread::spawn(move || open_in_system_browser(&app, &target));
             false
         })
         .on_new_window(move |url, _features: NewWindowFeatures| {
@@ -156,14 +163,21 @@ fn is_local_page(url: &Url) -> bool {
 }
 
 /// 用系统默认浏览器 / 协议处理器打开链接（失败只记日志，绝不打断用户操作）。
+///
+/// 成功与失败都写一条日志：排查“链接点不动”时，这条能直接区分
+/// 「没拦到」和「拦到了但没打开」两种完全不同的原因。
 fn open_in_system_browser(app: &tauri::AppHandle, url: &Url) {
-    if let Err(e) = app.opener().open_url(url.to_string(), None::<&str>) {
-        log::warn!("无法打开链接 {url}：{e}");
-        let _ = app.emit(
-            "log",
-            serde_json::json!({ "line": format!("[界面] 无法打开链接 {url}：{e}") }),
-        );
+    let (line, ok) = match app.opener().open_url(url.to_string(), None::<&str>) {
+        Ok(()) => (format!("[链接] 已交给系统浏览器：{url}"), true),
+        Err(e) => (format!("[链接] 无法打开 {url}：{e}"), false),
+    };
+    if !ok {
+        log::warn!("{line}");
     }
+    if let Some(state) = app.try_state::<Arc<AppState>>() {
+        state.append_log(&line);
+    }
+    state::emit_log(app, &line);
 }
 
 /// 注入式工具栏与 Rust 侧的通信主机名。

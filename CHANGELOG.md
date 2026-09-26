@@ -5,6 +5,61 @@
 
 ---
 
+## [1.0.5] — 2026-09-26
+
+### 🇬🇧 English
+
+🔧 **Two things that looked "completely dead" — both fixed**
+
+- **The plugin install / uninstall buttons did nothing.** Tauri 2 resolves command arguments as
+  **camelCase** by default (`tauri-macros`' `ArgumentCase::Camel`), but the frontend was sending
+  `install_spec` / `package_name`. `invoke` therefore failed to deserialize and rejected before the
+  command ever ran. The frontend now sends `installSpec` / `packageName`.
+- **Failures are now reported on the button itself.** A rejected `invoke` used to write its message
+  into the *"fetch from plugin sources"* status line — far away from the button you clicked, which is
+  exactly why the button looked dead. The button now shows `失败 ✗` with the reason in its tooltip,
+  and restores itself after 2.5 s.
+- **Clicking a link in dsh output now opens your browser.** dsh renders chat links as **plain anchors**
+  — its frontend bundles contain no `target="_blank"` / `noopener` at all — so a left click is an
+  ordinary top-level navigation, which only reaches `on_navigation`; that path did not reliably launch
+  the external program (right-click → "open in new window" worked, because that goes through
+  `on_new_window`). The injected `toolbar.js` now rewrites these clicks into `window.open(...)`,
+  reusing the already-proven `on_new_window` path. Only absolute http(s) URLs whose host is *not* the
+  local dsh service are intercepted — in-app navigation, relative links, anchors and `mailto:` are
+  left untouched.
+- **`on_navigation` is hardened as a fallback** (it still covers `location.href = ...` navigations and
+  clicks that happen before the injection script runs): the external open now happens on a separate
+  thread instead of inline on the webview event thread — the same reasoning already applied to
+  toolbar actions.
+- **"Open in system browser" now logs both success and failure** to the startup log (`[链接] ...`),
+  which distinguishes "never intercepted" from "intercepted but failed to launch".
+- Version bumped to **1.0.5**.
+
+### 🇨🇳 中文
+
+🔧 **两个“看起来完全没反应”的毛病，一次性修掉**
+
+- **插件安装 / 卸载按钮点了没反应。** Tauri 2 默认按 **camelCase** 解析命令参数
+  （`tauri-macros` 的 `ArgumentCase::Camel`），而前端传的是 `install_spec` / `package_name`。
+  于是 `invoke` 在反序列化阶段就报错退出，命令根本没执行。现在改为 `installSpec` / `packageName`。
+- **失败已经落到按钮上了。** 以前 `invoke` 被拒后，错误信息写进了「从插件来源获取」那行的状态栏 ——
+  离你点的按钮很远，正是"点了没反应"的观感来源。现在按钮自己会显示 `失败 ✗`，鼠标悬停可看原因，
+  2.5 秒后自动恢复。
+- **点击 dsh 输出里的链接现在会打开浏览器。** dsh 把聊天里的链接渲染成**普通锚点**
+  （它的前端包里完全没有 `target="_blank"` / `noopener`），所以左键点击是一次普通的顶层导航，
+  只会走到 `on_navigation`；而实测这条路径启动外部程序并不可靠（右键「在新窗口中打开」能打开，
+  因为那条走的是 `on_new_window`）。注入的 `toolbar.js` 现在把这类点击改写成 `window.open(...)`，
+  复用已验证可用的 `on_new_window` 路径。只有「绝对 http(s) 且主机不是本机 dsh 服务」的链接会被
+  拦下 —— 站内跳转、相对链接、锚点、`mailto:` 一律放行。
+- **`on_navigation` 同时做了兜底加固**（仍然兼顾 `location.href = ...` 这类导航，
+  以及注入脚本执行前就发生的点击）：外部打开改到独立线程上执行，不再在 webview 事件线程里同步做
+  —— 与工具栏动作同一条理由。
+- **「在系统浏览器中打开」现在成功与失败都会写启动日志**（`[链接] ...`），
+  这样能直接区分"压根没拦到"和"拦到了但没能启动"。
+- 版本号升至 **1.0.5**。
+
+---
+
 ## [1.0.4] — 2026-09-19
 
 ### 🇬🇧 English

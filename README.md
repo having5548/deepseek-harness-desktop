@@ -7,7 +7,7 @@
 > 把 DeepSeek Harness 装进一个原生窗口 —— **装完即用，像用普通软件一样简单**。
 > v1.0.2 起由 C#/WinUI 3 完全重写为 **Rust + Tauri 2**，跨 Windows / macOS / Linux。
 
-![版本](https://img.shields.io/badge/版本-1.0.4-2b6cb0)
+![版本](https://img.shields.io/badge/版本-1.0.5-2b6cb0)
 ![框架](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![平台](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%2C%20dsh%20首次启动自动安装-4ea04e)
@@ -52,8 +52,8 @@
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.4-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.4_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.5-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.5_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | 未签名，首次打开需右键 → 打开 |
 
 > 免安装版（Windows）：`src-tauri/target/release/DshDesktop.exe`（需与 `resources/` 目录放在一起）。
@@ -120,7 +120,7 @@ scripts\build-all.cmd
 → `tauri build --no-bundle` → Inno Setup 打包 → 产物：
 
 - `src-tauri/target/release/DshDesktop.exe` — 免安装直接运行
-- `artifacts/DshDesktop-Setup-1.0.4-rust.exe` — 安装器
+- `artifacts/DshDesktop-Setup-1.0.5-rust.exe` — 安装器
 
 ### Linux 构建 .deb（Ubuntu / Debian / UOS）
 

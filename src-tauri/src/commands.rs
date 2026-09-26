@@ -178,6 +178,11 @@ fn resolve_active_sources(settings: &AppSettings) -> Vec<plugins::PluginSource> 
 }
 
 /// 安装插件；成功后自动重启服务。
+/// 安装插件（`install_spec` 形如 `npm:@scope/name@1.2.3`）。
+///
+/// ⚠️ 参数名约定：Tauri 2 默认按 **camelCase** 解析命令参数
+/// （tauri-macros 的 `ArgumentCase::Camel`），所以前端必须传 `installSpec`。
+/// 传成 `install_spec` 会直接反序列化失败，表现为「按钮点了没反应」。
 #[tauri::command]
 pub async fn plugin_install(
     app: AppHandle,
@@ -193,6 +198,8 @@ pub async fn plugin_install(
 }
 
 /// 卸载插件：成功后**顺手清干净残留**（node_modules / .pnpm / 回退链接 / package.json 条目）。
+///
+/// ⚠️ 参数名约定：前端必须传 `packageName`（Tauri 2 默认 camelCase）。
 #[tauri::command]
 pub async fn plugin_remove(
     app: AppHandle,

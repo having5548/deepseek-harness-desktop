@@ -7,7 +7,7 @@
 > Put DeepSeek Harness in a native window — **install and use it like any ordinary app**.
 > Since v1.0.2 the app is fully rewritten from C#/WinUI 3 to **Rust + Tauri 2**, cross-platform on Windows / macOS / Linux.
 
-![Version](https://img.shields.io/badge/version-1.0.4-2b6cb0)
+![Version](https://img.shields.io/badge/version-1.0.5-2b6cb0)
 ![Framework](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![Runtime](https://img.shields.io/badge/runtime-bundled%20Node.js%2C%20dsh%20auto--install%20on%20first%20launch-4ea04e)
@@ -54,8 +54,8 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 
 | Platform | Package | Notes |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.4-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.4_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.5-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.5_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | Unsigned — right-click → Open on first launch |
 
 ### 🚀 Quick start
@@ -121,7 +121,7 @@ Pipeline: `prepare-runtime.ps1` (bundle node/npm/pnpm into `src-tauri/resources/
 → `tauri build --no-bundle` → Inno Setup → artifacts:
 
 - `src-tauri/target/release/DshDesktop.exe` — portable build
-- `artifacts/DshDesktop-Setup-1.0.4-rust.exe` — installer
+- `artifacts/DshDesktop-Setup-1.0.5-rust.exe` — installer
 
 ### Linux .deb build
 

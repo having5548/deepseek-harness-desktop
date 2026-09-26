@@ -84,7 +84,7 @@
         btn.className = 'small';
         btn.textContent = '卸载';
         btn.disabled = isBuiltin;
-        btn.addEventListener('click', () => pluginAction(btn, 'plugin_remove', { package_name: pkg }, '卸载中…', '已卸载 ✓', `卸载 ${pkg} 失败`, () => renderInstalled()));
+        btn.addEventListener('click', () => pluginAction(btn, 'plugin_remove', { packageName: pkg }, '卸载中…', '已卸载 ✓', `卸载 ${pkg} 失败`, () => renderInstalled()));
         btns.appendChild(btn);
         card.appendChild(left);
         card.appendChild(btns);
@@ -239,7 +239,7 @@
       install.className = 'small primary';
       install.textContent = '安装';
       install.addEventListener('click', () =>
-        pluginAction(install, 'plugin_install', { install_spec: p.InstallSpec },
+        pluginAction(install, 'plugin_install', { installSpec: p.InstallSpec },
           '安装中…', '已安装 ✓', `安装 ${p.PackageName} 失败`,
           async () => { settings = await call('get_settings'); renderDisabled(); renderInstalled(); })
       );
@@ -251,10 +251,20 @@
     }
 
     // ── 通用动作 ───────────────────────────────────
+    // 注意：Tauri 2 默认按 camelCase 解析命令参数（tauri-macros 的 ArgumentCase::Camel），
+    // 所以键名必须是 installSpec / packageName；写成 install_spec 会直接反序列化失败。
     async function pluginAction(btn, cmd, args, busyText, doneText, failTitle, after) {
       const orig = btn.textContent;
       btn.disabled = true;
       btn.textContent = busyText;
+      // 失败要落在按钮自己身上：只写 remoteStatus 的话，那行字离按钮很远，
+      // 在用户看来就是「点了没反应」。
+      const fail = (reason) => {
+        btn.textContent = '失败 ✗';
+        btn.title = `${failTitle}：${reason}`;
+        statusLine('remoteStatus', `${failTitle}：${reason}`);
+        setTimeout(() => { btn.textContent = orig; btn.title = ''; btn.disabled = false; }, 2500);
+      };
       try {
         const result = await call(cmd, args);
         if (result.success) {
@@ -262,15 +272,11 @@
           await after();
           setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
         } else {
-          statusLine('remoteStatus', `${failTitle}：${firstLine(result.output) || '（无输出）'}`);
           logTail(result.output);
-          btn.textContent = orig;
-          btn.disabled = false;
+          fail(firstLine(result.output) || '（无输出）');
         }
       } catch (e) {
-        statusLine('remoteStatus', `出错：${e}`);
-        btn.textContent = orig;
-        btn.disabled = false;
+        fail(String(e));
       }
     }
 

@@ -13,6 +13,11 @@
  * Rust 侧在 on_new_window / on_navigation 里识别该主机名，执行对应动作并把窗口请求
  * 拦掉（`NewWindowResponse::Deny`）——所以不会真的弹出窗口，页面状态也不受影响。
  * `.invalid` 是 RFC 2606 保留后缀，永不会被解析到真实站点。
+ *
+ * ## 为什么还在这里拦外链点击
+ * dsh 输出的链接是普通锚点，左键点击的顶层导航没能可靠地调起系统浏览器
+ * （详见下方 `externalHrefOf` 处的注释）。本脚本把它们改写成 window.open，
+ * 复用工具栏按钮已经在用的那套机制。
  */
 (function () {
   'use strict';
@@ -31,6 +36,62 @@
       /* 被拦截也无妨：Rust 侧已收到请求 */
     }
   }
+
+  /* ── 外链一律交给系统浏览器 ──────────────────────────────
+   * 背景：dsh 的聊天输出把链接渲染成**普通锚点** —— 它的前端包里完全没有
+   * target="_blank" / noopener，所以左键点击是一次顶层导航，只会触发 Rust 侧的
+   * on_navigation；而实测该回调里同步启动外部程序并不生效（右键「在新窗口中打开」
+   * 反而能打开 —— 那条走的是 on_new_window）。结果就是"链接点不动"。
+   *
+   * 这里把这类点击改写为 window.open(...)，复用 on_new_window 这条已验证可用的
+   * 路径，左键 / Ctrl+点击 / 中键行为一致。只拦「绝对 http(s) 且主机不是本机」的
+   * 链接：dsh 站内跳转、相对链接、锚点、mailto: 等一律放行，不影响应用自身功能。
+   */
+  var LOCAL_HOSTS = { localhost: 1, '127.0.0.1': 1, '[::1]': 1, 'tauri.localhost': 1 };
+
+  /** 命中外链则返回其绝对地址，否则 null。 */
+  function externalHrefOf(event) {
+    if (event.defaultPrevented) return null;
+    // composedPath 能穿透 shadow DOM；退回逐级找父节点的写法
+    var path = event.composedPath ? event.composedPath() : [];
+    var anchor = null;
+    for (var i = 0; i < path.length; i++) {
+      var step = path[i];
+      if (step && step.nodeType === 1 && step.tagName === 'A') {
+        anchor = step;
+        break;
+      }
+    }
+    if (!anchor) {
+      var node = event.target;
+      while (node && node.nodeType === 1 && node.tagName !== 'A') node = node.parentNode;
+      if (node && node.nodeType === 1 && node.tagName === 'A') anchor = node;
+    }
+    if (!anchor) return null;
+    if (anchor.closest && anchor.closest('#dsh-toolbar')) return null; // 工具栏自己的元素
+    var href = anchor.getAttribute('href') || '';
+    if (!/^https?:/i.test(href)) return null;
+    var url;
+    try {
+      url = new URL(href, location.href);
+    } catch (e) {
+      return null;
+    }
+    if (LOCAL_HOSTS[url.hostname.toLowerCase()]) return null; // dsh 服务自身
+    return url.href;
+  }
+
+  document.addEventListener(
+    'click',
+    function (event) {
+      var href = externalHrefOf(event);
+      if (!href) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.open(href, '_blank', 'noopener');
+    },
+    true
+  );
 
   // 简单描边图标（24×24 网格），避免引入外部字体/图标库
   var ICONS = {
