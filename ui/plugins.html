@@ -31,13 +31,18 @@
         <button id="btnRefresh">刷新列表</button>
       </div>
       <div class="status-line" id="remoteStatus" style="margin-top:8px">加载中…</div>
-      <div class="hint">安装后自动重启服务生效；若插件导致服务崩溃会被自动屏蔽。</div>
+      <div class="hint">安装后自动重启服务生效；若插件导致服务崩溃，会被自动卸载并清理残留（见下方历史记录）。</div>
       <div id="remoteList"></div>
     </div>
 
-    <!-- 已屏蔽 -->
+    <!-- 已自动卸载（历史记录，只读） -->
     <div class="section">
-      <h2>已屏蔽（因加载失败被自动禁用）</h2>
+      <h2 style="display:flex;align-items:center;justify-content:space-between">
+        <span>已自动卸载（历史记录）</span>
+        <button class="small" id="btnClearDisabled">清空历史</button>
+      </h2>
+      <div class="hint">因加载失败导致服务崩溃的插件会被自动卸载，并连同依赖与文件残留一并清理；
+        记录会保留在这里供查证（只读，不支持恢复）。若还需使用该插件，请从下方列表重新安装。</div>
       <div class="status-line" id="disabledStatus">…</div>
       <div id="disabledList"></div>
     </div>
@@ -53,7 +58,7 @@
 
     function statusLine(id, text) { el(id).textContent = text; }
 
-    // ── 已安装 / 已屏蔽 ─────────────────────────────
+    // ── 已安装 / 已自动卸载历史 ─────────────────────
     async function renderInstalled() {
       const installed = await call('plugins_installed');
       if (!installed.length) { statusLine('installedStatus', '无'); el('installedList').innerHTML = ''; return; }
@@ -89,8 +94,10 @@
 
     function renderDisabled() {
       const disabled = (settings?.DisabledPlugins || []).filter(Boolean);
-      if (!disabled.length) { statusLine('disabledStatus', '无'); el('disabledList').innerHTML = ''; return; }
-      statusLine('disabledStatus', `${disabled.length} 个插件被屏蔽`);
+      const clearBtn = el('btnClearDisabled');
+      if (clearBtn) clearBtn.disabled = !disabled.length;
+      if (!disabled.length) { statusLine('disabledStatus', '暂无记录'); el('disabledList').innerHTML = ''; return; }
+      statusLine('disabledStatus', `${disabled.length} 条记录（已卸载并清理残留）`);
       const list = el('disabledList');
       list.innerHTML = '';
       for (const pkg of disabled) {
@@ -98,14 +105,14 @@
         card.className = 'card';
         const left = document.createElement('div');
         left.className = 'grow';
-        left.innerHTML = `<div class="name">${esc(pkg)}</div>`;
+        left.innerHTML = `<div class="name">${esc(pkg)}</div>` +
+          `<div class="meta">已自动卸载 · 依赖与文件残留已清理</div>`;
         const btns = document.createElement('div');
         btns.className = 'btns';
-        const btn = document.createElement('button');
-        btn.className = 'small';
-        btn.textContent = '恢复';
-        btn.addEventListener('click', () => pluginAction(btn, 'plugin_restore', { package_name: pkg }, '恢复中…', '已恢复 ✓', `恢复 ${pkg} 失败`, async () => { settings = await call('get_settings'); renderDisabled(); }));
-        btns.appendChild(btn);
+        const badge = document.createElement('span');
+        badge.className = 'badge builtin';
+        badge.textContent = '历史';
+        btns.appendChild(badge);
         card.appendChild(left);
         card.appendChild(btns);
         list.appendChild(card);
@@ -232,7 +239,7 @@
       install.className = 'small primary';
       install.textContent = '安装';
       install.addEventListener('click', () =>
-        pluginAction(install, 'plugin_install', { install_spec: p.InstallSpec, package_name: p.PackageName },
+        pluginAction(install, 'plugin_install', { install_spec: p.InstallSpec },
           '安装中…', '已安装 ✓', `安装 ${p.PackageName} 失败`,
           async () => { settings = await call('get_settings'); renderDisabled(); renderInstalled(); })
       );
@@ -290,6 +297,11 @@
 
       el('btnRefresh').addEventListener('click', loadRemote);
       el('searchBox').addEventListener('input', applySearchFilter);
+      el('btnClearDisabled').addEventListener('click', async () => {
+        await call('clear_disabled_history');
+        settings = await call('get_settings');
+        renderDisabled();
+      });
       // 插件可能因崩溃自愈等被改动：窗口聚焦时刷新列表
       window.addEventListener('focus', async () => {
         settings = await call('get_settings');

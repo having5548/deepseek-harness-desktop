@@ -5,6 +5,70 @@
 
 ---
 
+## [1.0.4] — 2026-09-19
+
+### 🇬🇧 English
+
+🧹 **Auto-uninstall broken plugins, purge every trace of them — no restore, no residue**
+
+- **The crash flow now uninstalls instead of merely blocking.** Previously a plugin that made the service
+  exit was only added to a block-list: its files stayed on disk and the profile still listed it, so the
+  next launch could crash again. Now the offending plugin is actually removed, and the block-list is
+  gone — what remains is a **read-only history**.
+- **Residue purge (`purge_plugin_residue`).** For every removal (crash-driven or manual) the app now
+  cleans up five classes of leftovers:
+  1. `node_modules/<pkg>` — including the `@scope` parent when it becomes empty;
+  2. the `.pnpm` store entry, `.pnpm/<escaped-name>@<version>` (pnpm's `@scope+name` escaping);
+  3. `$DSH_HOME/profiles/web/.dsh-module-fallback/node_modules/<pkg>`;
+  4. plugin-owned data directories inside the profile (matched by normalised name, so `.dsh-market`
+     matches `dsh-market`);
+  5. the `dependencies` entry **and** the `dsh.profile.bundles` entry in the profile's `package.json`.
+     That last item is the real fix — `dsh.profile.bundles` is the layer list dsh loads at boot, and a
+     stale entry is exactly what turns one bad plugin into an endless crash loop.
+- **The "restore" button is gone.** Restoring a plugin whose files were deleted only ever reinstated the
+  crash. The section is now 「已自动卸载（历史记录）」: read-only, with a 「清空历史」 button
+  (`clear_disabled_history`).
+- **How the deletes stay safe.** Every path is inspected with `symlink_metadata` *before* deletion:
+  a symlink is removed as a link (never followed, never recursed into) and only a real directory is
+  removed with `remove_dir_all`. This matters because the profile can legitimately contain `link:`
+  dependencies pointing at your own source trees.
+- **Deliberate limitation:** only content inside the dsh directory is touched. A plugin that stores data
+  outside dsh keeps that data; the app does not delete across directories.
+- Also fixed: `get_installed_plugins()` ignored `DSH_HOME` and always read `~/.dsh`, so installed
+  plugins were listed from the wrong profile on setups that relocate their dsh home.
+- Also fixed: a `cargo test` warning in `locator.rs` (the shell-shim fixture was declared but unused;
+  the test now parses the `exec` line out of the real fixture instead of a duplicated literal).
+- Version bumped to **1.0.4**.
+
+### 🇨🇳 中文
+
+🧹 **插件出事就自动卸载、残留一并清干净 —— 不留恢复、不留垃圾**
+
+- **崩溃处理从「屏蔽」改为「真卸载」。** 以前让服务退出的插件只是被加进黑名单：文件还在磁盘上、
+  profile 里照样列着它，下次启动可能继续崩。现在直接卸载，并取消黑名单机制，只保留一份**只读历史**。
+- **残留清理（`purge_plugin_residue`）。** 无论崩溃自愈卸载还是手动卸载，都会清掉五类残留：
+  1. `node_modules/<包名>` —— 若是 `@scope` 包，父目录空了也会一并收走；
+  2. `.pnpm` 存储条目 `.pnpm/<转义名>@<版本>`（pnpm 的 `@scope+name` 转义规则）；
+  3. `$DSH_HOME/profiles/web/.dsh-module-fallback/node_modules/<包名>`；
+  4. profile 下该插件自建的数据目录（按归一化名称匹配，`.dsh-market` ↔ `dsh-market`）；
+  5. profile `package.json` 里的 `dependencies` 条目**以及** `dsh.profile.bundles` 条目。
+     最后这项才是真正的修复 —— `dsh.profile.bundles` 是 dsh 启动时加载的层列表，
+     残留条目正是「一个坏插件变成无限崩溃循环」的根源。
+- **「恢复」按钮删除。** 文件都删了还「恢复」，等于把崩溃原样装回来。该分区现在叫
+  「已自动卸载（历史记录）」：只读展示，另加「清空历史」按钮（`clear_disabled_history`）。
+- **删除为什么不会误伤。** 每个路径都先用 `symlink_metadata` 判断再动手：
+  软链只删链接本身（绝不跟随、绝不递归），只有真目录才用 `remove_dir_all`。
+  这一条很关键 —— profile 里完全可能存在 `link:` 依赖，指向你自己的源码目录。
+- **有意为之的边界：** 只清理 dsh 目录内的内容。插件若把数据存在 dsh 之外，那份数据不动，
+  应用不跨目录删除。
+- 顺手修复：`get_installed_plugins()` 原先忽略 `DSH_HOME`、写死读 `~/.dsh`，
+  在自定义 dsh home 的环境里会列错 profile 的插件。
+- 顺手修复：`locator.rs` 的 `cargo test` 警告（shell shim 测试夹具声明了却没用；
+  现在改为从真实夹具里取出 `exec` 行来解析，而不是重复写一份字面量）。
+- 版本号升至 **1.0.4**。
+
+---
+
 ## [1.0.3] — 2026-09-19
 
 ### 🇬🇧 English

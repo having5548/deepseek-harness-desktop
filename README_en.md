@@ -7,7 +7,7 @@
 > Put DeepSeek Harness in a native window — **install and use it like any ordinary app**.
 > Since v1.0.2 the app is fully rewritten from C#/WinUI 3 to **Rust + Tauri 2**, cross-platform on Windows / macOS / Linux.
 
-![Version](https://img.shields.io/badge/version-1.0.3-2b6cb0)
+![Version](https://img.shields.io/badge/version-1.0.4-2b6cb0)
 ![Framework](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![Runtime](https://img.shields.io/badge/runtime-bundled%20Node.js%2C%20dsh%20auto--install%20on%20first%20launch-4ea04e)
@@ -27,7 +27,7 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 | 🧩 **Auto-binding** | dsh is installed into a dedicated folder, located and reused automatically across app upgrades/reinstalls |
 | 🖥️ **Native experience** | Tauri native window + floating top toolbar (frosted-glass pill, collapsible), WebView renders the service UI |
 | 🔌 **Plugin marketplace** | Discover and one-click install plugins from multiple sources (DSH Market / npm / npmmirror); service restarts automatically |
-| 🩹 **Crash self-healing** | A broken plugin crashes the service? It gets blocked + uninstalled automatically, the service restarts safely, and you can restore it from the plugin manager |
+| 🩹 **Crash self-healing** | A broken plugin crashes the service? It is uninstalled automatically, its residue is **purged**, and the service restarts safely; the removal is kept in a read-only history |
 | 🪶 **Lightweight** | Native Rust binary — no ~200MB .NET runtime bundled anymore |
 
 ### Feature parity with the C# version (v0.7.2)
@@ -38,7 +38,10 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 - Startup self-checks: version-skew auto-repair; the `$DSH_HOME/profiles/node_modules` module fallback cache
   is validated and cleared automatically (the real fix behind "must delete everything and reinstall after update")
 - Service runs with `--profile web --no-open --port 0` (OS-assigned free port); the full auth token URL is captured
-- Plugin crash flow: offending plugins are blocked and uninstalled → safe restart → dialog with the log; restorable
+- Plugin crash flow: the offending plugin is **uninstalled** and its residue purged (`node_modules/<pkg>`, its `.pnpm`
+  store entry, the module-fallback symlink, plugin-owned data directories inside the profile, and its
+  `package.json` `dependencies` / `dsh.profile.bundles` entries) → safe restart → dialog with the log;
+  the removal is kept in 「插件管理 → 已自动卸载（历史记录）」 (read-only, not restorable)
 - 45s startup timeout notice; manual update check / dsh upgrade (optionally refreshing the plugin tree afterwards)
 - Kills the entire process tree on exit (`taskkill /T /F` on Windows, process-group signal on Unix)
 - External links (`target=_blank`) open in the system browser; isolated WebView user-data directory
@@ -51,8 +54,8 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
 
 | Platform | Package | Notes |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.3-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.3_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.4-rust.exe` | Inno Setup wizard, no admin required; checks WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.4_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | Unsigned — right-click → Open on first launch |
 
 ### 🚀 Quick start
@@ -69,7 +72,8 @@ The app spawns a local `dsh web` service process, parses the authenticated URL, 
    > 📍 dsh location: Windows — `DeepSeek Harness` folder on the **drive root of the app**
    > (same as the C# version, existing installs are reused); Linux/macOS — `~/.local/share/DeepSeek Harness`.
 
-3. **Install plugins** from the toolbar's plugin-manager button. Crashed plugins are blocked automatically and can be restored.
+3. **Install plugins** from the toolbar's plugin-manager button. A plugin that crashes the service is
+   uninstalled automatically and its residue cleaned up; the record is kept under "已自动卸载（历史记录）".
 
 ### Entry points (floating top toolbar)
 
@@ -80,6 +84,18 @@ A frosted-glass toolbar pinned to the top centre of the window, left to right:
 - **Tools**: Plugin manager / Settings / Startup log / Check for updates (`Ctrl+Shift+P`, `Ctrl+,`, `Ctrl+L`)
 
 Click the chevron on the right to collapse it into a small handle that stays out of the way; click again to expand.
+
+The **plugin manager** window has three sections: installed plugins (removable), fetch from plugin
+sources (searchable, one-click install), and auto-uninstalled (a read-only history you can clear).
+Whether you remove a plugin manually or because it crashed, the app also cleans up its residue —
+`node_modules/<pkg>`, the matching `.pnpm` store entry, the module-fallback symlink, plugin-owned
+data directories inside the profile, and the `package.json` `dependencies` / `dsh.profile.bundles`
+entries. That last one is the root cause of "it keeps crashing on the next launch because the
+uninstall left something behind".
+
+> Safety boundary: cleanup only ever touches things inside the dsh directory. If a plugin keeps its
+> data outside dsh (say, a repository on another drive), the app will not delete across directories,
+> so your own data can never be wiped by accident.
 
 ---
 
@@ -105,7 +121,7 @@ Pipeline: `prepare-runtime.ps1` (bundle node/npm/pnpm into `src-tauri/resources/
 → `tauri build --no-bundle` → Inno Setup → artifacts:
 
 - `src-tauri/target/release/DshDesktop.exe` — portable build
-- `artifacts/DshDesktop-Setup-1.0.3-rust.exe` — installer
+- `artifacts/DshDesktop-Setup-1.0.4-rust.exe` — installer
 
 ### Linux .deb build
 

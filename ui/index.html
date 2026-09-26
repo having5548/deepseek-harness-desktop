@@ -67,7 +67,7 @@
       });
       await listen('service-url', () => { /* 导航由核心完成 */ });
       await listen('crash', (e) => {
-        log.append(`[崩溃处理] 已自动屏蔽并卸载：${(e.payload.disabled || []).join(', ') || '（无）'}`);
+        log.append(`[崩溃处理] 已自动卸载并清理残留：${(e.payload.uninstalled || []).join(', ') || '（无）'}`);
       });
 
       el('btnReload').addEventListener('click', () => call('restart_service'));

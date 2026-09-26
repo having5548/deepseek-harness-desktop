@@ -498,11 +498,7 @@ pub async fn refresh_profile() -> PluginCommandResult {
 
 /// 读取 web profile 中已安装的插件（dsh.profile.bundles），含模板内置 bundle。
 pub fn get_installed_plugins() -> Vec<String> {
-    let manifest = paths::user_home_dir()
-        .join(".dsh")
-        .join("profiles")
-        .join("web")
-        .join("package.json");
+    let manifest = paths::web_profile_dir().join("package.json");
     let Ok(bytes) = std::fs::read(manifest) else {
         return Vec::new();
     };
@@ -526,6 +522,164 @@ pub fn get_installed_plugins() -> Vec<String> {
         }
     }
     list
+}
+
+/// 彻底清除某个插件在 web profile 中留下的全部残留，返回已清理项的描述（供日志展示）。
+///
+/// **为什么需要**：`dsh plugin remove` 只让 pnpm 把包从依赖树里摘掉，仍可能留下：
+/// - `node_modules/<pkg>`（`link:` / `file:` 依赖，或 pnpm 未清干净时）
+/// - `node_modules/.pnpm/<pkg>@<ver>` 虚拟 store 条目
+/// - `<profile>/.dsh-module-fallback/node_modules/<pkg>` 的符号链接
+/// - `package.json` 里 `dependencies` 与 `dsh.profile.bundles` 的条目
+/// - 插件自建的数据目录（形如 `<profile>/.dsh-market`）
+///
+/// 其中 `dsh.profile.bundles` 最关键：它决定 dsh 启动时加载哪些层。若卸载失败而该条目还在，
+/// 服务会因同一个插件反复崩溃（崩溃死循环），所以这里必须把它摘掉。
+///
+/// **安全前提**：必须区分符号链接与真实目录 —— profile 里存在 `link:` 型依赖
+/// （例如 `dsh-memory-evolve: link:H:/mycode/dsh-memory-evolve`），其 `node_modules/<pkg>`
+/// 是指向用户源码目录的符号链接；一旦用 `remove_dir_all` 跟进链接，就会删掉用户的真实目录。
+///
+/// **关于 lockfile**：正常路径下第 5 步什么都不会做（`dsh plugin remove` 已同步改过
+/// `package.json`，这里只是兜底）。只有卸载失败时才会真的改写 `package.json`，
+/// 此时 `pnpm-lock.yaml` 会短暂不同步；pnpm 默认的 `install` 会自动修正，
+/// 且 dsh 启动只读 `package.json` 的 bundles 列表、不会做 frozen-lockfile 校验，
+/// 所以用"锁文件不同步"换"跳不出崩溃死循环"是划算的。
+pub fn purge_plugin_residue(package_name: &str) -> Vec<String> {
+    let mut removed: Vec<String> = Vec::new();
+    let package_name = package_name.trim();
+    if package_name.is_empty() {
+        return removed;
+    }
+    let profile = paths::web_profile_dir();
+
+    // 1) node_modules/<pkg>（@scope/name 两级都能落在这里）
+    let module_path = profile.join("node_modules").join(package_name);
+    if delete_path_without_following_links(&module_path) {
+        removed.push(format!("node_modules/{package_name}"));
+    }
+    prune_empty_scope_dir(&module_path);
+
+    // 2) node_modules/.pnpm 中该包的虚拟 store 条目
+    let escaped = package_name.trim_start_matches('@').replace('/', "+");
+    let pnpm_store = profile.join("node_modules").join(".pnpm");
+    if let Ok(entries) = std::fs::read_dir(&pnpm_store) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == escaped || name.starts_with(&format!("{escaped}@")) {
+                if delete_path_without_following_links(&entry.path()) {
+                    removed.push(format!("node_modules/.pnpm/{name}"));
+                }
+            }
+        }
+    }
+
+    // 3) profile 自有的模块回退符号链接
+    let owned_path = paths::profile_owned_module_fallback_dir().join(package_name);
+    if delete_path_without_following_links(&owned_path) {
+        removed.push(format!(".dsh-module-fallback/node_modules/{package_name}"));
+    }
+    prune_empty_scope_dir(&owned_path);
+
+    // 4) profile 中插件自建的数据目录（如 .dsh-market）
+    purge_plugin_data_dirs(&profile, package_name, &mut removed);
+
+    // 5) package.json 的 dependencies / dsh.profile.bundles 条目
+    if strip_manifest_entry(&profile.join("package.json"), package_name) {
+        removed.push("package.json 条目".to_string());
+    }
+
+    removed
+}
+
+/// 删除插件自建的数据目录：形如 `<profile>/.dsh-market`。
+/// 判定方式为"去掉非字母数字后的小写名称相等"（`dsh-market` 与包名 `dshmarket` 归一化后相同），
+/// 以此避免误删无关目录。
+fn purge_plugin_data_dirs(profile: &std::path::Path, package_name: &str, removed: &mut Vec<String>) {
+    let normalize = |s: &str| -> String {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(|c| c.to_lowercase())
+            .collect()
+    };
+    let target = normalize(package_name);
+    if target.is_empty() {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(profile) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with('.') || normalize(&name) != target {
+            continue;
+        }
+        if delete_path_without_following_links(&entry.path()) {
+            removed.push(name);
+        }
+    }
+}
+
+/// 从 profile 的 package.json 中移除该插件的依赖声明与 bundle 层声明。
+fn strip_manifest_entry(manifest: &std::path::Path, package_name: &str) -> bool {
+    let Ok(bytes) = std::fs::read(manifest) else {
+        return false;
+    };
+    let Ok(mut json) = serde_json::from_slice::<Value>(&bytes) else {
+        return false;
+    };
+    let mut changed = false;
+
+    if let Some(deps) = json.get_mut("dependencies").and_then(Value::as_object_mut) {
+        changed |= deps.remove(package_name).is_some();
+    }
+    if let Some(bundles) = json
+        .get_mut("dsh")
+        .and_then(|d| d.get_mut("profile"))
+        .and_then(|p| p.get_mut("bundles"))
+        .and_then(Value::as_array_mut)
+    {
+        let before = bundles.len();
+        bundles.retain(|item| item.as_str() != Some(package_name));
+        changed |= bundles.len() != before;
+    }
+
+    if changed {
+        if let Ok(text) = serde_json::to_string_pretty(&json) {
+            let _ = std::fs::write(manifest, text);
+        }
+    }
+    changed
+}
+
+/// 删除一个路径，但**绝不跟进符号链接**（链接只删链接本身）。返回是否确实删除了内容。
+fn delete_path_without_following_links(path: &std::path::Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    let file_type = meta.file_type();
+    if file_type.is_symlink() {
+        // Unix 的目录符号链接用 remove_file；Windows 的目录符号链接要用 remove_dir
+        return std::fs::remove_file(path).is_ok() || std::fs::remove_dir(path).is_ok();
+    }
+    if file_type.is_dir() {
+        return std::fs::remove_dir_all(path).is_ok();
+    }
+    std::fs::remove_file(path).is_ok()
+}
+
+/// 删掉只剩空壳的 `@scope` 父目录（`node_modules` 本身保留）。
+fn prune_empty_scope_dir(path: &std::path::Path) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let is_scope = parent
+        .file_name()
+        .map(|n| n.to_string_lossy().starts_with('@'))
+        .unwrap_or(false);
+    if is_scope {
+        let _ = std::fs::remove_dir(parent); // 非空会失败，正是期望行为
+    }
 }
 
 // ── JSON 取值辅助 ───────────────────────────────────────

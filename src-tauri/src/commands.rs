@@ -177,27 +177,22 @@ fn resolve_active_sources(settings: &AppSettings) -> Vec<plugins::PluginSource> 
     }
 }
 
-/// 安装插件；成功后清除屏蔽记录并自动重启服务（与 C# 版行为一致）。
+/// 安装插件；成功后自动重启服务。
 #[tauri::command]
 pub async fn plugin_install(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     install_spec: String,
-    package_name: String,
 ) -> Result<plugins::PluginCommandResult, String> {
     let state = state.inner().clone();
     let result = plugins::install(&install_spec).await;
     if result.success {
-        {
-            let mut settings = state.settings.lock().unwrap();
-            settings.enable(&package_name);
-            let _ = settings.save();
-        }
         state::restart_service(&app, &state).await;
     }
     Ok(result)
 }
 
+/// 卸载插件：成功后**顺手清干净残留**（node_modules / .pnpm / 回退链接 / package.json 条目）。
 #[tauri::command]
 pub async fn plugin_remove(
     app: AppHandle,
@@ -207,29 +202,22 @@ pub async fn plugin_remove(
     let state = state.inner().clone();
     let result = plugins::remove(&package_name).await;
     if result.success {
+        let removed = plugins::purge_plugin_residue(&package_name);
+        state.append_log(&format!(
+            "[插件] 已卸载 {package_name}，清理残留：{}",
+            if removed.is_empty() { "无".to_string() } else { removed.join("、") }
+        ));
         state::restart_service(&app, &state).await;
     }
     Ok(result)
 }
 
-/// 恢复被屏蔽的插件：重新安装并移除屏蔽记录。
+/// 清空「已自动卸载」历史记录。
 #[tauri::command]
-pub async fn plugin_restore(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    package_name: String,
-) -> Result<plugins::PluginCommandResult, String> {
-    let state = state.inner().clone();
-    let result = plugins::install(&package_name).await;
-    if result.success {
-        {
-            let mut settings = state.settings.lock().unwrap();
-            settings.enable(&package_name);
-            let _ = settings.save();
-        }
-        state::restart_service(&app, &state).await;
-    }
-    Ok(result)
+pub fn clear_disabled_history(state: State<'_, Arc<AppState>>) {
+    let mut settings = state.settings.lock().unwrap();
+    settings.clear_disabled_history();
+    let _ = settings.save();
 }
 
 /// 手动刷新插件树（等价 profile 目录 pnpm update）。

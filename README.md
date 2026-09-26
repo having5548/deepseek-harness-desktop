@@ -7,7 +7,7 @@
 > 把 DeepSeek Harness 装进一个原生窗口 —— **装完即用，像用普通软件一样简单**。
 > v1.0.2 起由 C#/WinUI 3 完全重写为 **Rust + Tauri 2**，跨 Windows / macOS / Linux。
 
-![版本](https://img.shields.io/badge/版本-1.0.3-2b6cb0)
+![版本](https://img.shields.io/badge/版本-1.0.4-2b6cb0)
 ![框架](https://img.shields.io/badge/Rust-Tauri%202-dea584)
 ![平台](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
 ![运行时](https://img.shields.io/badge/运行时-自带%20Node.js%2C%20dsh%20首次启动自动安装-4ea04e)
@@ -27,7 +27,7 @@
 | 🧩 **安装即自动绑定** | dsh 自动装到独立目录，装完即被定位并复用，升级/重装应用不受影响 |
 | 🖥️ **原生体验** | Tauri 原生窗口 + 顶部悬浮工具栏（毛玻璃胶囊，可收起），WebView 渲染服务界面 |
 | 🔌 **插件市场** | 多来源（DSH Market / npm / npmmirror）发现并一键安装插件，装完服务自动重启 |
-| 🩹 **崩溃自愈** | 插件搞崩服务？自动屏蔽 + 卸载 + 安全配置重启，弹窗展示日志，可在插件管理中恢复 |
+| 🩹 **崩溃自愈** | 插件搞崩服务？自动卸载 + **残留彻底清理** + 安全配置重启，弹窗展示日志；卸载记录保留在只读历史中 |
 | 🪶 **轻量** | Rust 原生二进制，不再捆绑 ~200MB 的 .NET 运行时 |
 
 ### 功能与 C# 版（v0.7.2）完全对齐
@@ -38,7 +38,9 @@
 - 启动自检自愈：版本偏斜自动重装修复；`$DSH_HOME/profiles/node_modules` 模块回退缓存
   缺失/悬空时自动清除重建（"更新后必须删光重装"的根治方案）
 - 服务以 `--profile web --no-open --port 0` 启动，系统分配空闲端口永不冲突；完整捕获鉴权 token
-- 插件加载失败导致崩溃：自动屏蔽并卸载报错插件 → 安全重启 → 弹窗告知，可在「插件管理 → 已屏蔽」恢复
+- 插件加载失败导致崩溃：**自动卸载**报错插件，并把它的残留一并清理（`node_modules/<包名>`、`.pnpm` 存储条目、
+  模块回退目录中的软链、插件在 profile 下自建的数据目录、`package.json` 的 `dependencies` / `dsh.profile.bundles` 条目）
+  → 安全重启 → 弹窗告知；记录保留在「插件管理 → 已自动卸载（历史记录）」（只读，不再提供恢复）
 - 45 秒启动超时提示；手动检查更新 / 升级 dsh（可选升级后自动刷新插件树）
 - 一键终止整棵进程树（Windows `taskkill /T /F`，Unix 进程组信号）
 - 外部链接（`target=_blank`）交给系统浏览器打开；WebView 用户数据目录独立
@@ -50,8 +52,8 @@
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.3-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
-| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.3_amd64.deb` |
+| **Windows 10/11 x64** | `artifacts/DshDesktop-Setup-1.0.4-rust.exe` | Inno Setup 向导，无需管理员权限；检测 WebView2 Runtime |
+| **Ubuntu 22.04+ / Debian 12+ / UOS 1070 / deepin 23 x64** | `artifacts/*.deb` | `sudo apt install ./dsh-desktop_1.0.4_amd64.deb` |
 | **macOS (Apple Silicon)** | `artifacts/*.dmg` | 未签名，首次打开需右键 → 打开 |
 
 > 免安装版（Windows）：`src-tauri/target/release/DshDesktop.exe`（需与 `resources/` 目录放在一起）。
@@ -71,7 +73,8 @@
    > （与 C# 版一致，旧安装直接复用）；Linux/macOS 在 `~/.local/share/DeepSeek Harness`。
    > 设置中可手动指定 dsh 路径作为备用方案。
 
-3. **安装插件**：点顶部工具栏的「插件管理」图标，从多来源列表一键安装；崩溃自动屏蔽，可恢复。
+3. **安装插件**：点顶部工具栏的「插件管理」图标，从多来源列表一键安装；
+   导致崩溃的插件会被自动卸载并清理残留，记录见「已自动卸载（历史记录）」。
 
 ### 使用入口（顶部悬浮工具栏）
 
@@ -82,6 +85,16 @@
 - **工具**：插件管理 / 设置 / 启动日志 / 检查更新（`Ctrl+Shift+P`、`Ctrl+,`、`Ctrl+L`）
 
 点工具栏右侧的箭头可把它收成一个小手柄（不挡页面），再点一下展开。
+
+**插件管理**窗口分三块：已安装插件（可卸载）、从插件来源获取（可搜索、一键安装）、
+已自动卸载（历史记录，只读，可一键清空）。
+无论是手动卸载还是崩溃自愈卸载，应用都会自动清理该插件的残留：`node_modules/<包名>`、
+`.pnpm` 存储中的对应条目、模块回退目录里的软链、该插件在 profile 下自建的数据目录，
+以及 `package.json` 的 `dependencies` / `dsh.profile.bundles` 条目 —— 最后一项正是
+“卸载不干净导致下次启动继续崩”的根因。
+
+> 安全边界：清理只覆盖 dsh 目录内的内容。若插件把数据存在 dsh 之外（例如其他盘的仓库），
+> 应用不会跨目录删除，避免误删用户数据。
 
 ---
 
@@ -107,7 +120,7 @@ scripts\build-all.cmd
 → `tauri build --no-bundle` → Inno Setup 打包 → 产物：
 
 - `src-tauri/target/release/DshDesktop.exe` — 免安装直接运行
-- `artifacts/DshDesktop-Setup-1.0.3-rust.exe` — 安装器
+- `artifacts/DshDesktop-Setup-1.0.4-rust.exe` — 安装器
 
 ### Linux 构建 .deb（Ubuntu / Debian / UOS）
 
@@ -178,7 +191,9 @@ deepseek-harness-desktop-rust/
   可在「工具 → 检查更新」升级。
 - **更新 dsh 后启动报错**：v1.0.2 已内置版本偏斜检测 + 模块回退缓存自愈，启动时会自动重装修复，无需手动删除目录,直接重启即可。
 - **升级后插件树要不要刷新**：设置中「升级 dsh 后刷新插件树」默认开启（等价于在 profile 目录执行 `pnpm update`）。
-- **插件导致崩溃被自动屏蔽**：可在「插件管理 → 已屏蔽」分区「恢复」。
+- **插件导致崩溃被自动卸载**：v1.0.4 起不再只是「屏蔽」，而是直接卸载并清理残留（`.pnpm` 存储条目、模块回退软链、
+  插件数据目录、`package.json` 的 profile 层条目），从根上断开崩溃循环；
+  「已自动卸载」只是只读历史，不再提供「恢复」，如需再用请从插件列表重新安装。
 - **Linux 提示缺 webkit**：Tauri 2 需要 `libwebkit2gtk-4.1`（Ubuntu 22.04+ / Debian 12+ / deepin 23 / UOS 1070 自带）。
 - **界面空白 / 服务异常**：打开「工具 → 启动日志」查看服务输出；也可用菜单「在系统浏览器中打开」排查。
 

@@ -314,7 +314,7 @@ async fn start_host(app: &AppHandle, state: &Arc<AppState>, runtime: DshRuntime)
             "服务启动超时",
             &format!(
                 "dsh 服务未在 {START_TIMEOUT_SECS} 秒内就绪，可能是插件不兼容导致加载挂起。\n\
-                 可打开「插件管理」在「已屏蔽」中处理，或点击重新加载重试。"
+                 可打开「插件管理」查看「已自动卸载」历史，或点击重新加载重试。"
             ),
         );
     });
@@ -446,21 +446,35 @@ fn handle_crash(app: &AppHandle, state: &Arc<AppState>, crash: CrashInfo) {
 
 async fn crash_flow(app: &AppHandle, state: &Arc<AppState>, crash: CrashInfo) {
     // 崩溃恢复路径自身绝不能再让异常逃逸
-    let mut disabled: Vec<String> = Vec::new();
+    let mut uninstalled: Vec<String> = Vec::new();
+    let mut purged: Vec<String> = Vec::new();
 
-    // 1. 自动屏蔽（卸载 + 记录）报错插件。
-    //    注意：不能在持有 settings 锁的状态下 await（std 锁不可跨 await），
-    //    因此每次先卸载、成功后再短暂加锁记录。
+    // 1. 自动卸载报错插件，并把残留清干净。
+    //    - 卸载走 `dsh plugin remove`（pnpm 摘掉依赖并更新锁文件）；
+    //    - 随后 purge_plugin_residue 清掉 pnpm 可能留下的 node_modules / .pnpm /
+    //      回退符号链接 / package.json 条目（含 dsh.profile.bundles，避免下次启动又加载它）；
+    //    - 无论卸载是否成功都执行清理与记录：dsh.profile.bundles 被摘掉后，
+    //      即使文件没删干净，dsh 也不会再加载它，从而跳出"崩溃 → 重启 → 再崩溃"的死循环。
+    //    注意：不能在持有 settings 锁的状态下 await（std 锁不可跨 await）。
     for pkg in &crash.plugin_names {
         let removed = plugins::remove(pkg).await;
-        if removed.success {
+        let residue = plugins::purge_plugin_residue(pkg);
+        {
             let mut settings = state.settings.lock().unwrap();
-            settings.disable(pkg);
+            settings.record_auto_uninstall(pkg);
             let _ = settings.save();
-            if !disabled.contains(pkg) {
-                disabled.push(pkg.clone());
-            }
         }
+        if !uninstalled.contains(pkg) {
+            uninstalled.push(pkg.clone());
+        }
+        let detail = format!(
+            "[崩溃处理] {pkg}：卸载{}；清理残留：{}",
+            if removed.success { "成功" } else { "失败（已从 profile 层列表中摘除）" },
+            if residue.is_empty() { "无".to_string() } else { residue.join("、") }
+        );
+        state.append_log(&detail);
+        emit_log(app, &detail);
+        purged.extend(residue);
     }
 
     // 2. 以安全配置自动重启（已排除报错插件）
@@ -470,29 +484,31 @@ async fn crash_flow(app: &AppHandle, state: &Arc<AppState>, crash: CrashInfo) {
         "crash",
         serde_json::json!({
             "names": crash.plugin_names,
-            "disabled": disabled,
+            "uninstalled": uninstalled,
+            "purged": purged,
             "log": crash.error_log,
         }),
     );
 
     // 3. 弹窗告知用户（插件名 + 报错日志摘要）
-    let mut text = format!("以下插件加载失败导致服务退出：{}", crash.plugin_names.join(", "));
-    if !disabled.is_empty() {
-        text.push_str(&format!(
-            "\n\n已自动屏蔽并卸载：{}。服务已尝试以安全配置重启。",
-            disabled.join(", ")
-        ));
+    let mut text = format!(
+        "以下插件加载失败导致服务退出，已自动卸载：\n{}",
+        uninstalled.join("\n")
+    );
+    if !purged.is_empty() {
+        text.push_str("\n\n已彻底清理残留文件：\n");
+        text.push_str(&purged.join("\n"));
     }
+    text.push_str("\n\n服务已尝试以安全配置重启。若仍有问题，可在「插件管理 → 已自动卸载」查看历史记录。");
     text.push_str("\n\n报错日志（末尾部分）：\n");
     let all_lines: Vec<&str> = crash.error_log.lines().collect();
     let start = all_lines.len().saturating_sub(20);
     text.push_str(&all_lines[start..].join("\n"));
-    text.push_str("\n\n如需恢复该插件，请打开「插件管理」在「已屏蔽」中选择「恢复」。");
 
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
     app.dialog()
         .message(text)
-        .title("插件加载失败（已自动屏蔽）")
+        .title("插件加载失败（已自动卸载并清理）")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::Ok)
         .show(|_| {});

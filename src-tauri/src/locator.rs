@@ -394,12 +394,12 @@ else
   exec node  "$basedir/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
 fi
 "#;
-        // 直接喂带 node 调用的一行
-        let js = parse_node_invocation(
-            r#"exec "$basedir/node"  "$basedir/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@""#,
-            Path::new("/usr/local/bin/dsh"),
-        )
-        .unwrap();
+        // 从真实 shim 内容里取出调用 node 的那一行
+        let exec_line = content
+            .lines()
+            .find(|l| l.contains("exec ") && l.contains("bin.js"))
+            .expect("shim 中应存在 exec node ... 行");
+        let js = parse_node_invocation(exec_line, Path::new("/usr/local/bin/dsh")).unwrap();
         assert_eq!(js, "/usr/local/bin/node_modules/@deepseek-ai/dsh/lib/bin.js");
     }
 

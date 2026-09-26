@@ -55,7 +55,7 @@ fn main() {
             commands::plugins_fetch,
             commands::plugin_install,
             commands::plugin_remove,
-            commands::plugin_restore,
+            commands::clear_disabled_history,
             commands::plugin_refresh_profile,
             commands::open_external,
             commands::open_service_in_browser,

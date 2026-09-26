@@ -153,6 +153,20 @@ pub fn profile_module_fallback_dir() -> PathBuf {
     dsh_home().join("profiles").join("node_modules")
 }
 
+/// web profile 目录：`$DSH_HOME/profiles/web`。
+/// 插件（含 `dsh plugin` 管理的依赖）都装在这里；`cordis.yml`/`package.json`/`pnpm-lock.yaml` 同处。
+pub fn web_profile_dir() -> PathBuf {
+    dsh_home().join("profiles").join("web")
+}
+
+/// profile 自有的模块回退目录（`<profile>/.dsh-module-fallback/node_modules`）：
+/// dsh 用来给"只被某个 bundle 携带"的包建立符号链接。
+pub fn profile_owned_module_fallback_dir() -> PathBuf {
+    web_profile_dir()
+        .join(".dsh-module-fallback")
+        .join("node_modules")
+}
+
 /// 安装目录中被回退缓存镜像的包作用域目录（dsh 的依赖闭包都在这里）。
 pub fn installed_scope_dir() -> PathBuf {
     dsh_package_dir()
