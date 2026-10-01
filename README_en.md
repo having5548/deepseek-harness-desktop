@@ -1,7 +1,7 @@
 > 🌐 **中文用户请看** → [**README.md**](README.md)
 
 ---
-
+# Please note that this repository is no longer actively maintained. The official desktop version of Deepseek Harness has been released and is superior to this repository, so we recommend using the official version for download[click to download](https://www.deepseek.com/en/harness/).
 # 🚀 DeepSeek Harness Desktop (Rust / Tauri)
 
 > Put DeepSeek Harness in a native window — **install and use it like any ordinary app**.
