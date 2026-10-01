@@ -1,7 +1,9 @@
 > 🌐 **For English readers:** the English version is here → [**README_en.md**](README_en.md)
 
 ---
-#注意此仓库不再更新,由于Deepseek harness的官方桌面版已推出且比本仓库更好,因此推荐去用官方版[Download official edition](https://www.deepseek.com/en/harness/)
+# 注意此仓库不再更新,由于Deepseek harness的官方桌面版已推出且比本仓库更好,因此推荐去用官方版[Download official edition](https://www.deepseek.com/en/harness/)
+
+
 # 🚀 DeepSeek Harness 桌面客户端（Rust / Tauri 版）
 
 > 把 DeepSeek Harness 装进一个原生窗口 —— **装完即用，像用普通软件一样简单**。
